@@ -16,5 +16,10 @@
     "express": "^5.2.1",
     "mongoose": "^9.3.2",
     "nodemon": "^3.1.14"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.1.0",
+    "globals": "^17.4.0"
   }
 }

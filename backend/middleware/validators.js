@@ -1,6 +1,9 @@
 import mongoose from "mongoose";
 import { ApiError } from "./errorHandler.js";
 import Course from "../models/Course.js";
+import Student from "../models/Student.js";
+import Assessment from "../models/Assessment.js";
+import Result from "../models/Result.js";
 
 const isNonEmptyString = (value) =>
   typeof value === "string" && value.trim().length > 0;
@@ -82,7 +85,7 @@ export const validateAssessmentPayload = async (req, res, next) => {
   }
 };
 
-export const validateResultPayload = (req, res, next) => {
+export const validateResultPayload = async (req, res, next) => {
   try {
     const { studentId, assessmentId, score } = req.body || {};
 
@@ -94,6 +97,31 @@ export const validateResultPayload = (req, res, next) => {
     }
     assertObjectId(studentId, "studentId");
     assertObjectId(assessmentId, "assessmentId");
+
+    const [studentExists, assessmentExists] = await Promise.all([
+      Student.exists({ _id: studentId }),
+      Assessment.exists({ _id: assessmentId }),
+    ]);
+
+    if (!studentExists) {
+      throw new ApiError(400, "studentId does not reference an existing student");
+    }
+    if (!assessmentExists) {
+      throw new ApiError(400, "assessmentId does not reference an existing assessment");
+    }
+
+    const duplicateFilter = {
+      studentId,
+      assessmentId,
+    };
+    if (req.params.id && mongoose.Types.ObjectId.isValid(req.params.id)) {
+      duplicateFilter._id = { $ne: req.params.id };
+    }
+
+    const duplicateResult = await Result.exists(duplicateFilter);
+    if (duplicateResult) {
+      throw new ApiError(409, "A result for this student and assessment already exists");
+    }
 
     if (typeof score !== "number" || Number.isNaN(score) || score < 0 || score > 100) {
       throw new ApiError(400, "score must be a number between 0 and 100");

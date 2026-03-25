@@ -4,11 +4,11 @@ import SelectReportType from "./SelectReportType";
 
 const INITIAL_REPORTS = [
   { id: 1, name: "cc",                          type: "Student Category Perf", department: "Jamia Darussalam", courses: 1, dateCreated: "Jun 29, 2025" },
-  { id: 2, name: "Category Perf",               type: "Student Category Perf", department: "Jamia Darussalam", courses: 1, dateCreated: "May 6, 2025"  },
-  { id: 3, name: "Category Perf (copy)",         type: "Student Category Perf", department: "Jamia Darussalam", courses: 1, dateCreated: "May 6, 2025"  },
-  { id: 4, name: "Category Perf (copy) (copy)",  type: "Student Category Perf", department: "Jamia Darussalam", courses: 1, dateCreated: "May 6, 2025"  },
+  { id: 2, name: "Category Perf 1",               type: "Student Category Perf", department: "Jamia Darussalam", courses: 1, dateCreated: "May 6, 2025"  },
+  { id: 3, name: "Category Perf 2",         type: "Student Category Perf", department: "Jamia Darussalam", courses: 1, dateCreated: "May 6, 2025"  },
+  { id: 4, name: "Category Perf 3",  type: "Student Category Perf", department: "Jamia Darussalam", courses: 1, dateCreated: "May 6, 2025"  },
   { id: 5, name: "Course",                       type: "Course Performance",     department: "Jamia Darussalam", courses: 1, dateCreated: "May 6, 2025"  },
-  { id: 6, name: "cc (copy)",                    type: "Student Category Perf", department: "Jamia Darussalam", courses: 1, dateCreated: "Oct 23, 2025" },
+  { id: 6, name: "cc 2",                    type: "Student Category Perf", department: "Jamia Darussalam", courses: 1, dateCreated: "Oct 23, 2025" },
 ];
 
 export default function App() {

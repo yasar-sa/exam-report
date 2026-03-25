@@ -162,47 +162,47 @@ export const getStudentReport = async (req, res) => {
   res.json({ success: true, data });
 };
 
-export const getCourseSummary = async (req, res) => {
-  const data = await Result.aggregate([
-    {
-      $lookup: {
-        from: "assessments",
-        localField: "assessmentId",
-        foreignField: "_id",
-        as: "assessment"
-      }
-    },
-    { $unwind: "$assessment" },
+// export const getCourseSummary = async (req, res) => {
+//   const data = await Result.aggregate([
+//     {
+//       $lookup: {
+//         from: "assessments",
+//         localField: "assessmentId",
+//         foreignField: "_id",
+//         as: "assessment"
+//       }
+//     },
+//     { $unwind: "$assessment" },
 
-    {
-      $lookup: {
-        from: "courses",
-        localField: "assessment.courseId",
-        foreignField: "_id",
-        as: "course"
-      }
-    },
-    { $unwind: "$course" },
+//     {
+//       $lookup: {
+//         from: "courses",
+//         localField: "assessment.courseId",
+//         foreignField: "_id",
+//         as: "course"
+//       }
+//     },
+//     { $unwind: "$course" },
 
-    {
-      $group: {
-        _id: "$course._id",
-        avgScore: { $avg: "$score" }
-      }
-    },
+//     {
+//       $group: {
+//         _id: "$course._id",
+//         avgScore: { $avg: "$score" }
+//       }
+//     },
 
-    {
-      $group: {
-        _id: null,
-        totalCourses: { $sum: 1 },
-        atRiskCourses: {
-          $sum: {
-            $cond: [{ $lt: ["$avgScore", threshold] }, 1, 0]
-          }
-        }
-      }
-    }
-  ]);
+//     {
+//       $group: {
+//         // _id: null,
+//         totalCourses: { $sum: 1 },
+//         atRiskCourses: {
+//           $sum: {
+//             $cond: [{ $lt: ["$avgScore", threshold] }, 1, 0]
+//           }
+//         }
+//       }
+//     }
+//   ]);
 
-  res.json({ success: true, data: data[0] || {} });
-};
+//   res.json({ success: true, data: data[0] || {} });
+// };

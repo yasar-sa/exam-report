@@ -6,7 +6,7 @@ import {
     getCourseAssessments,
     getAssessmentStudents,
     getStudentReport,
-    getCourseSummary,
+    // getCourseSummary,
 } from "../controllers/reportController.js";
 import { asyncHandler } from "../middleware/errorHandler.js";
 import { validateObjectIdParam } from "../middleware/validators.js";
@@ -23,6 +23,6 @@ router.get(
     asyncHandler(getAssessmentStudents),
 );
 router.get("/students", asyncHandler(getStudentReport));
-router.get("/course/summary", asyncHandler(getCourseSummary));
+// router.get("/course/summary", asyncHandler(getCourseSummary));
 
 export default router;
