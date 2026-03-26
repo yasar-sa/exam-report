@@ -9,7 +9,11 @@ export default function ReportFormLeft({
   reportName, setReportName,
   startDate, setStartDate,
   endDate, setEndDate,
-  department, setDepartment,
+  courses,
+  courseId,
+  setCourseId,
+  department,
+  setDepartment,
   children, // slot for extra fields below categories
 }) {
   return (
@@ -30,70 +34,68 @@ export default function ReportFormLeft({
       {/* Date Range */}
       <div className="mb-4">
         <div className="field-label">DATE RANGE</div>
-        <div className="d-flex gap-3">
+        <div className="d-flex flex-column flex-sm-row gap-3">
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 13, color: "#444", marginBottom: 4 }}>Start Date</div>
             <div className="date-wrapper">
               <input
-                type="text"
+                type="date"
                 className="text-input"
-                placeholder="ex: 12/10/2017"
+                style={{ height: '38px', paddingRight: '10px' }}
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
               />
-              <span className="date-icon"><CalendarIcon /></span>
             </div>
           </div>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 13, color: "#444", marginBottom: 4 }}>End Date</div>
             <div className="date-wrapper">
               <input
-                type="text"
+                type="date"
                 className="text-input"
-                placeholder="ex: 12/10/2017"
+                style={{ height: '38px', paddingRight: '10px' }}
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
               />
-              <span className="date-icon"><CalendarIcon /></span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Department */}
+      {/* Course OR Department (fallback) */}
       <div className="mb-4">
-        <div className="field-label">DEPARTMENT</div>
-        <select
-          className="dept-select"
-          value={department}
-          onChange={(e) => setDepartment(e.target.value)}
-        >
-          <option value="">Select a Department</option>
-          <option value="jamia">Jamia Darussalam</option>
-        </select>
+        {Array.isArray(courses) && courses.length > 0 && setCourseId ? (
+          <>
+            <div className="field-label">COURSE</div>
+            <select
+              className="dept-select"
+              value={courseId}
+              onChange={(e) => setCourseId(e.target.value)}
+            >
+              <option value="">Select a Course</option>
+              {courses.map((c) => (
+                <option key={c._id} value={c._id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </>
+        ) : (
+          <>
+            <div className="field-label">DEPARTMENT</div>
+            <select
+              className="dept-select"
+              value={department}
+              onChange={(e) => setDepartment(e.target.value)}
+            >
+              <option value="">Select a Department</option>
+              <option value="jamia">Jamia Darussalam</option>
+            </select>
+          </>
+        )}
       </div>
 
-      {/* Categories */}
-      <div className="mb-4">
-        <div className="field-label">CATEGORIES</div>
-        <div className="categories-hint">
-          These are predefined reportable tags which are set at the institution and department level.
-        </div>
-        <button className="btn-add-category">
-          <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-            <path d="M12 5v14M5 12h14" />
-          </svg>
-          Add Category
-        </button>
-      </div>
 
-      {/* Student Groups */}
-      <div className="mb-2">
-        <div className="field-label">
-          STUDENT GROUPS <span className="optional">(Optional)</span>
-        </div>
-        <button className="btn-student-groups">STUDENT GROUPS</button>
-      </div>
 
       {/* Any extra fields passed from parent */}
       {children}

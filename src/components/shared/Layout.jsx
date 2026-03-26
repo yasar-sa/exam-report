@@ -12,6 +12,9 @@ export default function Layout({ children }) {
           background: #1a73c1; height: 56px;
           display: flex; align-items: center; padding: 0 24px; gap: 16px;
         }
+        @media (max-width: 768px) {
+          .examsoft-navbar { padding: 0 16px; gap: 10px; }
+        }
         .examsoft-logo {
           display: flex; align-items: center; gap: 8px;
           color: white; font-weight: 700; font-size: 18px; letter-spacing: -0.3px;
@@ -34,6 +37,10 @@ export default function Layout({ children }) {
           display: flex; align-items: center; justify-content: space-between;
           padding: 14px 28px;
           border-bottom: 1px solid #ddd;
+          flex-wrap: wrap; gap: 12px;
+        }
+        @media (max-width: 768px) {
+          .sub-header { padding: 14px 16px; }
         }
 
         /* ── Back link ── */
@@ -100,6 +107,11 @@ export default function Layout({ children }) {
           border-bottom: 1px solid #e8e8e8;
         }
         .form-body { padding: 32px 40px 40px; }
+        @media (max-width: 768px) {
+          .form-card { margin: 16px 12px; }
+          .form-body { padding: 16px 20px 24px; }
+          .col-divider { display: none; }
+        }
 
         /* ── Form fields ── */
         .field-label {
@@ -138,6 +150,16 @@ export default function Layout({ children }) {
           width: 1px; background: #e0e0e0; margin: 0 32px;
           flex-shrink: 0; align-self: stretch;
         }
+
+        /* ── Responsive Tables ── */
+        .table-responsive {
+          display: block; width: 100%; overflow-x: auto;
+          -webkit-overflow-scrolling: touch; margin-bottom: 1rem;
+        }
+        .table { width: 100%; margin-bottom: 1rem; color: #333; border-collapse: collapse; }
+        .table th, .table td { white-space: nowrap; }
+        .table th.wrap-cell, .table td.wrap-cell { white-space: normal; }
+
 
         /* ── Right column (assessment / threshold) ── */
         .section-title-right {

@@ -15,23 +15,12 @@ import {
   validateStudentPayload,
 } from "../middleware/validators.js";
 
-const toPositiveInt = (value, fallback) => {
-  const parsed = Number.parseInt(value, 10);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
-};
-
-const buildPageMeta = (totalItems, page, limit) => ({
-  totalItems,
-  totalPages: Math.max(1, Math.ceil(totalItems / limit)),
-  page,
-  limit,
-});
-
 const parseSort = (sortBy, order, allowedFields, defaultSortBy) => {
   const field = allowedFields.includes(sortBy) ? sortBy : defaultSortBy;
   const direction = order === "asc" ? 1 : -1;
   return { [field]: direction };
 };
+
 
 
 // =======================
@@ -44,44 +33,32 @@ router.post("/students", validateStudentPayload, asyncHandler(async (req, res) =
   res.status(201).json({ success: true, data });
 }));
 
-// GET ALL
+// GET ALL 
 router.get("/students", asyncHandler(async (req, res) => {
   const {
-    page = "1",
-    limit = "10",
     sortBy = "createdAt",
     order = "desc",
     search = "",
     department = "",
   } = req.query;
 
-  const pageNum = toPositiveInt(page, 1);
-  const limitNum = Math.min(toPositiveInt(limit, 10), 100);
-
   const filter = {};
+
   if (search) {
     filter.$or = [
       { firstName: { $regex: search, $options: "i" } },
       { lastName: { $regex: search, $options: "i" } },
     ];
   }
+
   if (department) {
     filter.department = department;
   }
 
-  const [totalItems, data] = await Promise.all([
-    Student.countDocuments(filter),
-    Student.find(filter)
-      .sort(parseSort(sortBy, order, ["firstName", "lastName", "department", "createdAt"], "createdAt"))
-      .skip((pageNum - 1) * limitNum)
-      .limit(limitNum),
-  ]);
+  const data = await Student.find(filter)
+    .sort(parseSort(sortBy, order, ["firstName", "lastName", "department", "createdAt"], "createdAt"));
 
-  res.json({
-    success: true,
-    data,
-    meta: buildPageMeta(totalItems, pageNum, limitNum),
-  });
+  res.json({ success: true, data });
 }));
 
 // GET ONE
@@ -105,6 +82,7 @@ router.delete("/students/:id", validateObjectIdParam("id"), asyncHandler(async (
 }));
 
 
+
 // =======================
 //  COURSE CRUD
 // =======================
@@ -116,30 +94,19 @@ router.post("/courses", validateCoursePayload, asyncHandler(async (req, res) => 
 
 router.get("/courses", asyncHandler(async (req, res) => {
   const {
-    page = "1",
-    limit = "10",
     sortBy = "createdAt",
     order = "desc",
     search = "",
   } = req.query;
 
-  const pageNum = toPositiveInt(page, 1);
-  const limitNum = Math.min(toPositiveInt(limit, 10), 100);
-  const filter = search ? { name: { $regex: search, $options: "i" } } : {};
+  const filter = search
+    ? { name: { $regex: search, $options: "i" } }
+    : {};
 
-  const [totalItems, data] = await Promise.all([
-    Course.countDocuments(filter),
-    Course.find(filter)
-      .sort(parseSort(sortBy, order, ["name", "createdAt"], "createdAt"))
-      .skip((pageNum - 1) * limitNum)
-      .limit(limitNum),
-  ]);
+  const data = await Course.find(filter)
+    .sort(parseSort(sortBy, order, ["name", "createdAt"], "createdAt"));
 
-  res.json({
-    success: true,
-    data,
-    meta: buildPageMeta(totalItems, pageNum, limitNum),
-  });
+  res.json({ success: true, data });
 }));
 
 router.get("/courses/:id", validateObjectIdParam("id"), asyncHandler(async (req, res) => {
@@ -160,6 +127,7 @@ router.delete("/courses/:id", validateObjectIdParam("id"), asyncHandler(async (r
 }));
 
 
+
 // =======================
 //  ASSESSMENT CRUD
 // =======================
@@ -171,8 +139,6 @@ router.post("/assessments", validateAssessmentPayload, asyncHandler(async (req, 
 
 router.get("/assessments", asyncHandler(async (req, res) => {
   const {
-    page = "1",
-    limit = "10",
     sortBy = "createdAt",
     order = "desc",
     search = "",
@@ -180,36 +146,27 @@ router.get("/assessments", asyncHandler(async (req, res) => {
     courseId = "",
   } = req.query;
 
-  const pageNum = toPositiveInt(page, 1);
-  const limitNum = Math.min(toPositiveInt(limit, 10), 100);
-
   const filter = {};
+
   if (search) {
     filter.name = { $regex: search, $options: "i" };
   }
+
   if (type) {
     filter.type = type;
   }
+
   if (courseId) {
     if (!mongoose.Types.ObjectId.isValid(courseId)) {
-      throw new ApiError(400, "Invalid courseId query parameter");
+      throw new ApiError(400, "Invalid courseId");
     }
     filter.courseId = courseId;
   }
 
-  const [totalItems, data] = await Promise.all([
-    Assessment.countDocuments(filter),
-    Assessment.find(filter)
-      .sort(parseSort(sortBy, order, ["name", "type", "date", "createdAt"], "createdAt"))
-      .skip((pageNum - 1) * limitNum)
-      .limit(limitNum),
-  ]);
+  const data = await Assessment.find(filter)
+    .sort(parseSort(sortBy, order, ["name", "type", "date", "createdAt"], "createdAt"));
 
-  res.json({
-    success: true,
-    data,
-    meta: buildPageMeta(totalItems, pageNum, limitNum),
-  });
+  res.json({ success: true, data });
 }));
 
 router.get("/assessments/:id", validateObjectIdParam("id"), asyncHandler(async (req, res) => {
@@ -230,6 +187,7 @@ router.delete("/assessments/:id", validateObjectIdParam("id"), asyncHandler(asyn
 }));
 
 
+
 // =======================
 //  RESULT CRUD
 // =======================
@@ -241,8 +199,6 @@ router.post("/results", validateResultPayload, asyncHandler(async (req, res) => 
 
 router.get("/results", asyncHandler(async (req, res) => {
   const {
-    page = "1",
-    limit = "10",
     sortBy = "createdAt",
     order = "desc",
     studentId = "",
@@ -251,47 +207,35 @@ router.get("/results", asyncHandler(async (req, res) => {
     maxScore = "",
   } = req.query;
 
-  const pageNum = toPositiveInt(page, 1);
-  const limitNum = Math.min(toPositiveInt(limit, 10), 100);
   const filter = {};
 
   if (studentId) {
     if (!mongoose.Types.ObjectId.isValid(studentId)) {
-      throw new ApiError(400, "Invalid studentId query parameter");
+      throw new ApiError(400, "Invalid studentId");
     }
     filter.studentId = studentId;
   }
+
   if (assessmentId) {
     if (!mongoose.Types.ObjectId.isValid(assessmentId)) {
-      throw new ApiError(400, "Invalid assessmentId query parameter");
+      throw new ApiError(400, "Invalid assessmentId");
     }
     filter.assessmentId = assessmentId;
   }
 
   if (minScore !== "" || maxScore !== "") {
-    const minVal = minScore !== "" ? Number(minScore) : undefined;
-    const maxVal = maxScore !== "" ? Number(maxScore) : undefined;
-    if ((minVal !== undefined && Number.isNaN(minVal)) || (maxVal !== undefined && Number.isNaN(maxVal))) {
-      throw new ApiError(400, "minScore and maxScore must be numeric");
-    }
+    const minVal = Number(minScore);
+    const maxVal = Number(maxScore);
+
     filter.score = {};
-    if (minVal !== undefined) filter.score.$gte = minVal;
-    if (maxVal !== undefined) filter.score.$lte = maxVal;
+    if (!Number.isNaN(minVal)) filter.score.$gte = minVal;
+    if (!Number.isNaN(maxVal)) filter.score.$lte = maxVal;
   }
 
-  const [totalItems, data] = await Promise.all([
-    Result.countDocuments(filter),
-    Result.find(filter)
-      .sort(parseSort(sortBy, order, ["score", "createdAt"], "createdAt"))
-      .skip((pageNum - 1) * limitNum)
-      .limit(limitNum),
-  ]);
+  const data = await Result.find(filter)
+    .sort(parseSort(sortBy, order, ["score", "createdAt"], "createdAt"));
 
-  res.json({
-    success: true,
-    data,
-    meta: buildPageMeta(totalItems, pageNum, limitNum),
-  });
+  res.json({ success: true, data });
 }));
 
 router.get("/results/:id", validateObjectIdParam("id"), asyncHandler(async (req, res) => {
@@ -310,6 +254,5 @@ router.delete("/results/:id", validateObjectIdParam("id"), asyncHandler(async (r
   await Result.findByIdAndDelete(req.params.id);
   res.json({ success: true, data: { message: "Result deleted" } });
 }));
-
 
 export default router;

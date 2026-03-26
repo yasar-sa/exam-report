@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import SliderWithInput from "./SliderWithInput";
 
-export default function ReportFormRight({ sliders }) {
+export default function ReportFormRight({ sliders, onValuesChange }) {
   // sliders: array of { label, stateKey } — parent controls values via props if needed
   // For simplicity each instance manages its own slider state here
   const [assessmentTypes, setAssessmentTypes] = useState({
@@ -22,29 +22,15 @@ export default function ReportFormRight({ sliders }) {
     setSliderValues((prev) => ({ ...prev, [key]: val }));
   };
 
+  useEffect(() => {
+    if (typeof onValuesChange !== "function") return;
+    onValuesChange({ assessmentTypes, sliderValues });
+  }, [assessmentTypes, sliderValues, onValuesChange]);
+
   return (
     <div style={{ flex: 1 }}>
 
-      {/* Assessment Types */}
-      <div className="mb-2">
-        <div className="section-title-right">
-          ASSESSMENT TYPES <span className="optional">(Optional)</span>
-        </div>
-        <div className="section-desc">
-          Select assessment types to be included in the final report.
-        </div>
-        {["Exam", "Quiz", "Assignment"].map((type) => (
-          <div className="checkbox-row" key={type}>
-            <input
-              type="checkbox"
-              id={`assess-${type}`}
-              checked={assessmentTypes[type]}
-              onChange={() => toggleAssessment(type)}
-            />
-            <label htmlFor={`assess-${type}`}>{type}</label>
-          </div>
-        ))}
-      </div>
+
 
       {/* Threshold sliders */}
       <div className="threshold-section">

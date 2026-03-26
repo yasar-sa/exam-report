@@ -5,31 +5,51 @@ import CategoryPerformanceReport from "./CategoryPerformanceReport";
 
 const REPORT_TYPES = [
   {
-    id: "category",
-    title: "CATEGORY PERFORMANCE",
-    description: "See how categories performed across assessments over a period of time.",
+    id: "course",
+    title: "COURSE REPORT",
+    description: "See how your course is doing and which assessments may be at risk. Drill down to the student level to understand what's causing courses to be at risk.",
   },
   {
     id: "student",
-    title: "STUDENT CATEGORY PERFORMANCE",
-    description: "See how categories are performing for students in a course or multiple courses.",
+    title: "STUDENT REPORT",
+    description: "See how individual students are performing in a course across assessments.",
   },
 ];
 
-export default function SelectReportType({ onBack }) {
-  const [selectedView, setSelectedView] = useState(null);
+export default function SelectReportType({ onBack, onReportCreated, initialConfig }) {
+  const [selectedView, setSelectedView] = useState(() => {
+    if (initialConfig) {
+      return initialConfig.type === "Student Performance" ? "student" : "course";
+    }
+    return null;
+  });
 
   if (selectedView === "student") {
-    return <StudentCategoryPerformanceReport onBack={() => setSelectedView(null)} />;
+    return (
+      <StudentCategoryPerformanceReport
+        onBack={onBack}
+        onReportCreated={onReportCreated}
+        initialConfig={initialConfig}
+      />
+    );
   }
-  if (selectedView === "category") {
-    return <CategoryPerformanceReport onBack={() => setSelectedView(null)} />;
+  if (selectedView === "course") {
+    return (
+      <CategoryPerformanceReport
+        onBack={onBack}
+        onReportCreated={onReportCreated}
+        initialConfig={initialConfig}
+      />
+    );
   }
 
   return (
     <Layout>
       <style>{`
         .select-page { padding: 28px 40px; }
+        @media (max-width: 768px) {
+          .select-page { padding: 16px 20px; }
+        }
         .report-card {
           background: white; border: 1px solid #d9d9d9; border-radius: 3px;
           display: flex; flex-direction: column;

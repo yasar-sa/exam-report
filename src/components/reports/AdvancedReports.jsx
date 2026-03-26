@@ -1,41 +1,74 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Layout from "../shared/Layout";
 import SelectReportType from "./SelectReportType";
 
-const INITIAL_REPORTS = [
-  { id: 1, name: "cc",                          type: "Student Category Perf", department: "Jamia Darussalam", courses: 1, dateCreated: "Jun 29, 2025" },
-  { id: 2, name: "Category Perf 1",               type: "Student Category Perf", department: "Jamia Darussalam", courses: 1, dateCreated: "May 6, 2025"  },
-  { id: 3, name: "Category Perf 2",         type: "Student Category Perf", department: "Jamia Darussalam", courses: 1, dateCreated: "May 6, 2025"  },
-  { id: 4, name: "Category Perf 3",  type: "Student Category Perf", department: "Jamia Darussalam", courses: 1, dateCreated: "May 6, 2025"  },
-  { id: 5, name: "Course",                       type: "Course Performance",     department: "Jamia Darussalam", courses: 1, dateCreated: "May 6, 2025"  },
-  { id: 6, name: "cc 2",                    type: "Student Category Perf", department: "Jamia Darussalam", courses: 1, dateCreated: "Oct 23, 2025" },
-];
-
 export default function App() {
   const [view, setView] = useState("list");
-  if (view === "selectType") return <SelectReportType onBack={() => setView("list")} />;
-  return <AdvancedReports onCreateNew={() => setView("selectType")} />;
+  const [viewConfig, setViewConfig] = useState(null);
+  const [reports, setReports] = useState([]);
+
+  const fetchReports = async () => {
+    try {
+      const res = await fetch("http://localhost:5000/api/saved-reports", { cache: "no-store" });
+      const json = await res.json();
+      if (json.success) setReports(json.data);
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    fetchReports();
+  }, []);
+
+  const handleReportCreated = () => {
+    fetchReports();
+  };
+
+  if (view === "selectType") {
+    return (
+      <SelectReportType
+        onBack={() => { setView("list"); setViewConfig(null); }}
+        onReportCreated={handleReportCreated}
+        initialConfig={viewConfig}
+      />
+    );
+  }
+
+  return (
+    <AdvancedReports
+      onCreateNew={() => { setView("selectType"); setViewConfig(null); }}
+      onViewReport={(r) => { setView("selectType"); setViewConfig(r); }}
+      reports={reports}
+    />
+  );
 }
 
-function AdvancedReports({ onCreateNew }) {
-  const [reports]     = useState(INITIAL_REPORTS);
+function AdvancedReports({ onCreateNew, onViewReport, reports }) {
   const [search,       setSearch]      = useState("");
   const [itemsPerPage, setItemsPerPage] = useState(50);
   const [selectedIds,  setSelectedIds]  = useState([]);
-  const [sortCol,      setSortCol]      = useState("courses");
+  const [sortCol,      setSortCol]      = useState("name");
   const [sortDir,      setSortDir]      = useState("asc");
+  const [currentPage,  setCurrentPage]  = useState(1);
 
   const filtered = reports.filter((r) =>
     r.name.toLowerCase().includes(search.toLowerCase())
   );
 
   const sorted = [...filtered].sort((a, b) => {
-    let A = a[sortCol], B = b[sortCol];
+    let A = a[sortCol] || "", B = b[sortCol] || "";
     if (typeof A === "string") { A = A.toLowerCase(); B = B.toLowerCase(); }
     return A < B ? (sortDir === "asc" ? -1 : 1) : A > B ? (sortDir === "asc" ? 1 : -1) : 0;
   });
 
-  const displayed   = sorted.slice(0, itemsPerPage);
+  // Reset to first page if search changes or items per page changes and total pages shrink
+  const totalPages = Math.ceil(sorted.length / itemsPerPage) || 1;
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(1);
+  }, [totalPages, currentPage]);
+
+  const displayed   = sorted.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
   const allChecked  = displayed.length > 0 && displayed.every((r) => selectedIds.includes(r.id));
   const toggleAll   = () => setSelectedIds(allChecked ? [] : displayed.map((r) => r.id));
   const toggleOne   = (id) => setSelectedIds((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id]);
@@ -53,7 +86,10 @@ function AdvancedReports({ onCreateNew }) {
     <Layout>
       <style>{`
         .page-content { padding: 32px 48px; }
-        .report-table { background: white; border-radius: 4px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+        @media (max-width: 768px) {
+          .page-content { padding: 16px 20px; }
+        }
+        .report-table { background: white; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
         .report-table thead tr  { background: #3d5166; }
         .report-table thead th  {
           color: white; font-size: 11.5px; font-weight: 600; letter-spacing: 0.5px;background: #3d5166;
@@ -92,13 +128,13 @@ function AdvancedReports({ onCreateNew }) {
 
       <div className="page-content">
         {/* Title row */}
-        <div className="d-flex align-items-center justify-content-between mb-4">
+        <div className="d-flex flex-column flex-md-row align-items-md-center justify-content-between mb-4 gap-3">
           <h4 className="mb-0 fw-semibold" style={{ fontSize: 26, color: "#222" }}>Advanced Reports</h4>
           <button className="btn-create" onClick={onCreateNew}>CREATE NEW REPORT</button>
         </div>
 
         {/* Items per page + total */}
-        <div className="d-flex align-items-center justify-content-between mb-3">
+        <div className="d-flex flex-column flex-sm-row align-items-sm-center justify-content-between mb-3 gap-2">
           <div className="d-flex align-items-center gap-2">
             <span style={{ fontSize: 14, color: "#444" }}>Items per page:</span>
             <select className="items-select" value={itemsPerPage} onChange={(e) => setItemsPerPage(Number(e.target.value))}>
@@ -108,8 +144,7 @@ function AdvancedReports({ onCreateNew }) {
           <span style={{ fontSize: 14, color: "#444" }}>Total Reports: {filtered.length}</span>
         </div>
 
-        {/* Search + Filter */}
-        <div className="d-flex mb-0">
+        <div className="d-flex mb-3">
           <div className="search-wrapper">
             <span className="search-icon">
               <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -118,20 +153,18 @@ function AdvancedReports({ onCreateNew }) {
             </span>
             <input
               className="search-box"
-              style={{ borderRight: "none", borderRadius: "4px 0 0 4px" }}
+              style={{ borderRadius: "4px" }}
               placeholder="Find a Report"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-          <button className="filter-btn" style={{ borderRadius: "0 4px 4px 0", borderLeft: "none" }}>
-            Filter ▾
-          </button>
         </div>
 
         {/* Table */}
-        <div className="report-table">
-          <table className="table mb-0 report-table">
+        <div className="table-responsive" style={{ borderRadius: '4px' }}>
+          <div className="report-table">
+          <table className="table mb-0 report-table" style={{ minWidth: '700px' }}>
             <thead>
               <tr>
                 <th style={{ width: 48 }}>
@@ -141,14 +174,12 @@ function AdvancedReports({ onCreateNew }) {
                   { col: "name",        label: "REPORT NAME" },
                   { col: "type",        label: "REPORT TYPE" },
                   { col: "department",  label: "DEPARTMENT" },
-                  { col: "courses",     label: "COURSES", center: true },
                   { col: "dateCreated", label: "DATE CREATED" },
-                ].map(({ col, label, center }) => (
+                ].map(({ col, label }) => (
                   <th
                     key={col}
                     onClick={() => handleSort(col)}
                     className={sortCol === col ? "active" : ""}
-                    style={center ? { textAlign: "center" } : {}}
                   >
                     {label} &nbsp;<SortIcon col={col} />
                   </th>
@@ -160,23 +191,48 @@ function AdvancedReports({ onCreateNew }) {
             </thead>
             <tbody>
               {displayed.length === 0 ? (
-                <tr><td colSpan={7} className="text-center text-muted py-4">No reports found.</td></tr>
+                <tr><td colSpan={6} className="text-center text-muted py-4">No reports found.</td></tr>
               ) : displayed.map((r) => (
                 <tr key={r.id}>
                   <td><input type="checkbox" className="row-checkbox" checked={selectedIds.includes(r.id)} onChange={() => toggleOne(r.id)} /></td>
-                  <td><a href="#" className="report-link" onClick={(e) => e.preventDefault()}>{r.name}</a></td>
+                  <td><a href="#" className="report-link" onClick={(e) => { e.preventDefault(); onViewReport(r); }}>{r.name}</a></td>
                   <td>{r.type}</td>
                   <td>{r.department}</td>
-                  <td style={{ textAlign: "center" }}>
-                    <a href="#" className="courses-badge" onClick={(e) => e.preventDefault()}>{r.courses}</a>
-                  </td>
                   <td>{r.dateCreated}</td>
-                  <td />
+                  <td>
+                    <button className="btn btn-sm btn-outline-primary" onClick={() => onViewReport(r)}>View</button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
+          </div>
         </div>
+
+        {/* Pagination Controls */}
+        {totalPages > 1 && (
+          <div className="d-flex justify-content-center align-items-center mt-4 gap-2">
+            <button 
+              className="btn btn-sm btn-outline-secondary" 
+              disabled={currentPage === 1} 
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              style={{ fontSize: "12px", border: "1px solid #ccc" }}
+            >
+              Previous
+            </button>
+            <span style={{ fontSize: "13px", color: "#555", fontWeight: 500, margin: "0 8px" }}>
+              Page {currentPage} of {totalPages}
+            </span>
+            <button 
+              className="btn btn-sm btn-outline-secondary" 
+              disabled={currentPage === totalPages} 
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              style={{ fontSize: "12px", border: "1px solid #ccc" }}
+            >
+              Next
+            </button>
+          </div>
+        )}
       </div>
     </Layout>
   );
