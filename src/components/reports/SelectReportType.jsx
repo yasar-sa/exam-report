@@ -1,13 +1,12 @@
-import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import Layout from "../shared/Layout";
-import StudentCategoryPerformanceReport from "./StudentCategoryPerformanceReport";
-import CategoryPerformanceReport from "./CategoryPerformanceReport";
 
 const REPORT_TYPES = [
   {
     id: "course",
     title: "COURSE REPORT",
-    description: "See how your course is doing and which assessments may be at risk. Drill down to the student level to understand what's causing courses to be at risk.",
+    description:
+      "See how your course is doing and which assessments may be at risk. Drill down to the student level to understand what's causing courses to be at risk.",
   },
   {
     id: "student",
@@ -16,32 +15,8 @@ const REPORT_TYPES = [
   },
 ];
 
-export default function SelectReportType({ onBack, onReportCreated, initialConfig }) {
-  const [selectedView, setSelectedView] = useState(() => {
-    if (initialConfig) {
-      return initialConfig.type === "Student Performance" ? "student" : "course";
-    }
-    return null;
-  });
-
-  if (selectedView === "student") {
-    return (
-      <StudentCategoryPerformanceReport
-        onBack={onBack}
-        onReportCreated={onReportCreated}
-        initialConfig={initialConfig}
-      />
-    );
-  }
-  if (selectedView === "course") {
-    return (
-      <CategoryPerformanceReport
-        onBack={onBack}
-        onReportCreated={onReportCreated}
-        initialConfig={initialConfig}
-      />
-    );
-  }
+export default function SelectReportType() {
+  const navigate = useNavigate();
 
   return (
     <Layout>
@@ -65,11 +40,12 @@ export default function SelectReportType({ onBack, onReportCreated, initialConfi
           display: flex; flex-direction: column;
         }
         .card-desc { font-size: 13.5px; color: #444; line-height: 1.55; flex: 1; margin-bottom: 20px; }
-        .section-heading { font-size: 18px; color: #333; font-weight: 400; margin-bottom: 24px; }
+        .section-heading { font-size: 18px; color: #333; font-weight: 400; margin-bottom: 8px; }
+        .section-subheading { font-size: 13px; color: #666; margin-bottom: 24px; }
       `}</style>
 
       <div className="select-page">
-        <button className="back-link mb-4" onClick={onBack}>
+        <button className="back-link mb-4" onClick={() => navigate("/")}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M19 12H5M12 5l-7 7 7 7" />
           </svg>
@@ -77,17 +53,23 @@ export default function SelectReportType({ onBack, onReportCreated, initialConfi
         </button>
 
         <div className="section-heading">Select a Report Type</div>
+        <div className="section-subheading">
+          Pick the report you want to create. The route will stay stable, so refresh keeps you on the same page.
+        </div>
 
         <div className="row g-3">
-          {REPORT_TYPES.map((rt) => (
-            <div className="col-12 col-md-4" key={rt.id}>
+          {REPORT_TYPES.map((reportType) => (
+            <div className="col-12 col-md-6" key={reportType.id}>
               <div className="report-card h-100">
                 <div className="card-header-bar">
-                  <p className="card-title">{rt.title}</p>
+                  <p className="card-title">{reportType.title}</p>
                 </div>
                 <div className="card-body-content">
-                  <p className="card-desc">{rt.description}</p>
-                  <button className="btn-select" onClick={() => setSelectedView(rt.id)}>
+                  <p className="card-desc">{reportType.description}</p>
+                  <button
+                    className="btn-select"
+                    onClick={() => navigate(`/reports/new/${reportType.id}`)}
+                  >
                     SELECT
                   </button>
                 </div>

@@ -59,6 +59,9 @@ const buildTypeList = (config = {}) => {
 
 const buildCommonConfig = (config = {}) => {
   const thresholds = config.sliderValues || {};
+  const assessmentIdList = parseCommaList(
+    config.assessmentIds || config.selectedAssessmentIds,
+  ).map((assessmentId) => toObjectId(assessmentId, "assessmentId"));
 
   return {
     startDate: config.startDate || "",
@@ -72,6 +75,7 @@ const buildCommonConfig = (config = {}) => {
       DEFAULT_THRESHOLD,
     ),
     typeList: buildTypeList(config),
+    assessmentIdList,
   };
 };
 
@@ -90,7 +94,14 @@ export const generateCourseReportSnapshot = async (config = {}) => {
   }
 
   const courseObjId = toObjectId(courseId, "courseId");
-  const { startDate, endDate, thresholdCourse, thresholdStudent, typeList } =
+  const {
+    startDate,
+    endDate,
+    thresholdCourse,
+    thresholdStudent,
+    typeList,
+    assessmentIdList,
+  } =
     buildCommonConfig(config);
 
   const start = parseDate(startDate);
@@ -103,10 +114,12 @@ export const generateCourseReportSnapshot = async (config = {}) => {
 
   const summaryMatch = { "course._id": courseObjId };
   if (typeList.length > 0) summaryMatch["assessment.type"] = { $in: typeList };
+  if (assessmentIdList.length > 0) summaryMatch["assessment._id"] = { $in: assessmentIdList };
   withDateMatch(summaryMatch, start, end, "assessment.date");
 
   const assessmentMatch = { "assessment.courseId": courseObjId };
   if (typeList.length > 0) assessmentMatch["assessment.type"] = { $in: typeList };
+  if (assessmentIdList.length > 0) assessmentMatch["assessment._id"] = { $in: assessmentIdList };
   withDateMatch(assessmentMatch, start, end, "assessment.date");
 
   const [courseStudents, assessments, studentRows] = await Promise.all([
@@ -276,7 +289,7 @@ export const generateCourseReportSnapshot = async (config = {}) => {
     avgScore: 0,
     totalStudents: 0,
     atRiskStudents: 0,
-    isAtRiskCourse: thresholdCourse > 0,
+    isAtRiskCourse: false,
   };
 
   const hydratedAssessments = assessments.map((assessment) => ({
@@ -294,6 +307,7 @@ export const generateCourseReportSnapshot = async (config = {}) => {
       courseAtRisk: thresholdCourse,
       studentAtRisk: thresholdStudent,
     },
+    selectedAssessmentIds: assessmentIdList.map((assessmentId) => String(assessmentId)),
     summary: {
       totalCourses: courseStudents.length > 0 ? courseStudents.length : 1,
       atRiskCourseCount:
@@ -319,7 +333,7 @@ export const generateStudentReportSnapshot = async (config = {}) => {
   }
 
   const courseObjId = toObjectId(courseId, "courseId");
-  const { startDate, endDate, thresholdStudent, typeList } =
+  const { startDate, endDate, thresholdStudent, typeList, assessmentIdList } =
     buildCommonConfig(config);
 
   const start = parseDate(startDate);
@@ -332,6 +346,7 @@ export const generateStudentReportSnapshot = async (config = {}) => {
 
   const assessmentMatch = { "assessment.courseId": courseObjId };
   if (typeList.length > 0) assessmentMatch["assessment.type"] = { $in: typeList };
+  if (assessmentIdList.length > 0) assessmentMatch["assessment._id"] = { $in: assessmentIdList };
   withDateMatch(assessmentMatch, start, end, "assessment.date");
 
   const studentRows = await Result.aggregate([
@@ -382,9 +397,9 @@ export const generateStudentReportSnapshot = async (config = {}) => {
     thresholds: {
       studentAtRisk: thresholdStudent,
     },
+    selectedAssessmentIds: assessmentIdList.map((assessmentId) => String(assessmentId)),
     totalStudents: studentRows.length,
     atRiskStudentsCount: studentRows.filter((item) => item.status === "At Risk").length,
     students: studentRows,
   };
 };
-

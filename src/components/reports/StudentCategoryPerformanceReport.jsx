@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import Layout from "../shared/Layout";
 import ReportFormShell from "../shared/ReportFormShell";
 import ReportFormLeft from "../shared/ReportFormLeft";
@@ -8,11 +9,14 @@ const API_BASE = "http://localhost:5000";
 
 const SLIDERS = [{ label: "Student At Risk Threshold", stateKey: "studentAtRisk" }];
 
-export default function StudentCategoryPerformanceReport({
-  onBack,
-  onReportCreated,
-  initialConfig,
-}) {
+const defaultAssessmentTypes = {
+  Exam: true,
+  Quiz: true,
+  Assignment: true,
+};
+
+export default function StudentCategoryPerformanceReport({ initialConfig }) {
+  const navigate = useNavigate();
   const [reportDbId, setReportDbId] = useState(initialConfig?.id || null);
   const [reportName, setReportName] = useState(
     initialConfig?.config?.reportName || initialConfig?.name || "",
@@ -21,11 +25,7 @@ export default function StudentCategoryPerformanceReport({
   const [endDate, setEndDate] = useState(initialConfig?.config?.endDate || "");
   const [courseId, setCourseId] = useState(initialConfig?.config?.courseId || "");
   const [assessmentTypes, setAssessmentTypes] = useState(
-    initialConfig?.config?.assessmentTypes || {
-      Exam: true,
-      Quiz: true,
-      Assignment: true,
-    },
+    initialConfig?.config?.assessmentTypes || defaultAssessmentTypes,
   );
   const [sliderValues, setSliderValues] = useState(
     initialConfig?.config?.sliderValues || { studentAtRisk: 70 },
@@ -36,6 +36,7 @@ export default function StudentCategoryPerformanceReport({
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState("");
   const [isEditing, setIsEditing] = useState(!initialConfig);
+  const [lastRerunAt, setLastRerunAt] = useState(initialConfig?.lastRerunAt || null);
 
   const shouldLoadCourses = isEditing || !initialConfig;
 
@@ -65,6 +66,10 @@ export default function StudentCategoryPerformanceReport({
     };
   }, [shouldLoadCourses]);
 
+  const goBack = () => {
+    navigate(initialConfig ? "/" : "/reports/new");
+  };
+
   const courseName = useMemo(() => {
     return (
       courses.find((course) => course._id === courseId)?.name ||
@@ -74,6 +79,10 @@ export default function StudentCategoryPerformanceReport({
     );
   }, [courses, courseId, report, initialConfig]);
 
+  const rerunLabel = lastRerunAt
+    ? `Last rerun completed on ${new Date(lastRerunAt).toLocaleString()}`
+    : "Last rerun status: not rerun yet";
+
   const syncFromSavedReport = (savedReport) => {
     setReportDbId(savedReport.id);
     setReport(savedReport.reportData || null);
@@ -81,14 +90,9 @@ export default function StudentCategoryPerformanceReport({
     setStartDate(savedReport.config?.startDate || "");
     setEndDate(savedReport.config?.endDate || "");
     setCourseId(savedReport.config?.courseId || "");
-    setAssessmentTypes(
-      savedReport.config?.assessmentTypes || {
-        Exam: true,
-        Quiz: true,
-        Assignment: true,
-      },
-    );
+    setAssessmentTypes(savedReport.config?.assessmentTypes || defaultAssessmentTypes);
     setSliderValues(savedReport.config?.sliderValues || { studentAtRisk: 70 });
+    setLastRerunAt(savedReport.lastRerunAt || null);
     setIsEditing(false);
   };
 
@@ -134,7 +138,9 @@ export default function StudentCategoryPerformanceReport({
       }
 
       syncFromSavedReport(json.data);
-      if (typeof onReportCreated === "function") onReportCreated();
+      if (!reportDbId && json.data?.id) {
+        navigate(`/reports/${json.data.id}`, { replace: true, state: { report: json.data } });
+      }
     } catch (e) {
       setError(e?.message || "Failed to generate report");
     } finally {
@@ -162,7 +168,6 @@ export default function StudentCategoryPerformanceReport({
       }
 
       syncFromSavedReport(json.data);
-      if (typeof onReportCreated === "function") onReportCreated();
     } catch (e) {
       setError(e?.message || "Failed to rerun report");
     } finally {
@@ -177,7 +182,7 @@ export default function StudentCategoryPerformanceReport({
     }
 
     if (!reportDbId) {
-      onBack();
+      goBack();
       return;
     }
 
@@ -185,8 +190,7 @@ export default function StudentCategoryPerformanceReport({
       await fetch(`${API_BASE}/api/saved-reports/${reportDbId}`, {
         method: "DELETE",
       });
-      if (typeof onReportCreated === "function") onReportCreated();
-      onBack();
+      navigate("/");
     } catch {
       setError("Failed to delete report.");
       setIsConfirmingDelete(false);
@@ -219,8 +223,8 @@ export default function StudentCategoryPerformanceReport({
         </div>
         <div style={{ fontSize: "11px", color: "#666", marginTop: "4px" }}>
           Course: {report?.courseName || courseName || "Unknown"} | Date Range:{" "}
-          {report?.startedAt || "Any"} - {report?.endedAt || "Any"} | Student At Risk
-          Threshold: {report?.thresholds?.studentAtRisk ?? 0}%
+          {report?.startedAt || "Any"} - {report?.endedAt || "Any"} | Student At Risk Threshold:{" "}
+          {report?.thresholds?.studentAtRisk ?? 0}%
         </div>
       </div>
 
@@ -237,14 +241,7 @@ export default function StudentCategoryPerformanceReport({
           className="d-flex flex-column flex-sm-row justify-content-between align-items-sm-end mb-2 gap-2"
           style={{ borderBottom: "1px solid #eee", paddingBottom: "10px", marginBottom: "15px" }}
         >
-          <div
-            style={{
-              fontSize: 13,
-              fontWeight: 700,
-              color: "#333",
-              textTransform: "uppercase",
-            }}
-          >
+          <div style={{ fontSize: 13, fontWeight: 700, color: "#333", textTransform: "uppercase" }}>
             Students
           </div>
           <div className="d-flex flex-wrap gap-2 gap-sm-3 align-items-center" style={{ fontSize: 11, color: "#555" }}>
@@ -264,23 +261,11 @@ export default function StudentCategoryPerformanceReport({
         </div>
 
         <div className="table-responsive" style={{ borderRadius: "3px" }}>
-          <table
-            className="table"
-            style={{ border: "1px solid #ddd", borderBottom: "none", minWidth: "750px" }}
-          >
+          <table className="table" style={{ border: "1px solid #ddd", borderBottom: "none", minWidth: "750px" }}>
             <thead>
-              <tr
-                style={{
-                  background: "#516275",
-                  color: "#fff",
-                  fontSize: "10px",
-                  letterSpacing: "0.5px",
-                }}
-              >
+              <tr style={{ background: "#516275", color: "#fff", fontSize: "10px", letterSpacing: "0.5px" }}>
                 <th style={{ padding: "12px 16px", fontWeight: "600", border: "none" }}>STUDENT</th>
-                <th style={{ padding: "12px 16px", fontWeight: "600", border: "none" }}>
-                  ASSESSMENT AVG SCORE
-                </th>
+                <th style={{ padding: "12px 16px", fontWeight: "600", border: "none" }}>ASSESSMENT AVG SCORE</th>
                 <th style={{ padding: "12px 16px", fontWeight: "600", border: "none" }}>STATUS</th>
               </tr>
             </thead>
@@ -319,12 +304,7 @@ export default function StudentCategoryPerformanceReport({
                             transform: "translateX(-50%)",
                           }}
                         >
-                          <svg
-                            width="12"
-                            height="12"
-                            viewBox="0 0 10 10"
-                            style={{ fill: "none", stroke: "#cfa625", strokeWidth: "2" }}
-                          >
+                          <svg width="12" height="12" viewBox="0 0 10 10" style={{ fill: "none", stroke: "#cfa625", strokeWidth: "2" }}>
                             <path d="M5 1L9 5L5 9L1 5Z" />
                           </svg>
                         </div>
@@ -382,109 +362,75 @@ export default function StudentCategoryPerformanceReport({
             style={{ borderBottom: "1px solid #ddd", paddingBottom: "12px" }}
           >
             <div>
-              <div
-                style={{
-                  color: "#1a73c1",
-                  fontSize: "11px",
-                  textTransform: "uppercase",
-                  fontWeight: 600,
-                  letterSpacing: "0.5px",
-                }}
-              >
-                <span onClick={onBack} style={{ cursor: "pointer" }}>
-                  ADVANCED REPORTS
-                </span>{" "}
-                /
-              </div>
-              {/* <div
-                style={{
-                  fontSize: "24px",
-                  color: "#333",
-                  fontWeight: 300,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "8px",
-                }}
-              >
-                Student
-                <button
-                  onClick={() => setIsEditing(true)}
-                  style={{ border: "none", background: "none", cursor: "pointer", color: "#1a73c1", padding: 0 }}
-                >
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-                  </svg>
-                </button>
-              </div> */}
+              <button className="back-link mb-2" onClick={goBack}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M19 12H5M12 5l-7 7 7 7" />
+                </svg>
+                Back to Advanced Reports
+              </button>
             </div>
 
-            <div className="d-flex flex-wrap align-items-center gap-3 mt-2 mt-md-0">
-              <button
-                onClick={handleDelete}
-                onMouseLeave={() => setIsConfirmingDelete(false)}
-                style={{
-                  border: isConfirmingDelete ? "1px solid #d32f2f" : "none",
-                  background: isConfirmingDelete ? "#fff5f5" : "none",
-                  fontSize: "11px",
-                  fontWeight: 600,
-                  color: "#d32f2f",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "4px",
-                  padding: "4px 8px",
-                  borderRadius: "4px",
-                }}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                </svg>
-                {isConfirmingDelete ? "CONFIRM DELETE?" : "DELETE"}
-              </button>
-              <button
-                onClick={() => setIsEditing(true)}
-                style={{
-                  border: "none",
-                  background: "none",
-                  fontSize: "11px",
-                  fontWeight: 600,
-                  color: "#1a73c1",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "4px",
-                  marginLeft: "15px",
-                }}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="12" cy="12" r="3" />
-                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-                </svg>
-                EDIT & CREATE NEW
-              </button>
-              <button
-                className="btn btn-sm"
-                style={{
-                  background: "#008e45",
-                  color: "white",
-                  fontSize: "11px",
-                  fontWeight: 600,
-                  border: "none",
-                  padding: "6px 14px",
-                  borderRadius: "3px",
-                }}
-                onClick={rerunReport}
-                disabled={isGenerating}
-              >
-                {isGenerating ? "RERUNNING..." : "RERUN REPORT"}
-              </button>
+            <div className="d-flex flex-column align-items-md-end gap-2">
+              <div className="d-flex flex-wrap align-items-center gap-3 mt-2 mt-md-0 justify-content-md-end">
+                <button
+                  onClick={handleDelete}
+                  onMouseLeave={() => setIsConfirmingDelete(false)}
+                  style={{
+                    border: isConfirmingDelete ? "1px solid #d32f2f" : "none",
+                    background: isConfirmingDelete ? "#fff5f5" : "none",
+                    fontSize: "11px",
+                    fontWeight: 600,
+                    color: "#d32f2f",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "4px",
+                    padding: "4px 8px",
+                    borderRadius: "4px",
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                  </svg>
+                  {isConfirmingDelete ? "CONFIRM DELETE?" : "DELETE"}
+                </button>
+                <button
+                  onClick={() => setIsEditing(true)}
+                  style={{
+                    border: "none",
+                    background: "none",
+                    fontSize: "11px",
+                    fontWeight: 600,
+                    color: "#1a73c1",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "4px",
+                    marginLeft: "15px",
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="3" />
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                  </svg>
+                  EDIT & CREATE NEW
+                </button>
+                <button
+                  className="btn btn-sm"
+                  style={{
+                    background: "#008e45",
+                    color: "white",
+                    fontSize: "11px",
+                    fontWeight: 600,
+                    border: "none",
+                    padding: "6px 14px",
+                    borderRadius: "3px",
+                  }}
+                  onClick={rerunReport}
+                  disabled={isGenerating}
+                >
+                  {isGenerating ? "RERUNNING..." : "RERUN REPORT"}
+                </button>
+              </div>
+              <div style={{ fontSize: "11px", color: "#666" }}>{rerunLabel}</div>
             </div>
           </div>
           {error && <div className="alert alert-danger mt-3">{error}</div>}
@@ -494,7 +440,7 @@ export default function StudentCategoryPerformanceReport({
         <ReportFormShell
           title="Student Performance Report"
           reportName={reportName}
-          onBack={onBack}
+          onBack={goBack}
           onGenerate={generateReport}
           onDelete={reportDbId ? handleDelete : undefined}
           isGenerating={isGenerating}
@@ -525,9 +471,7 @@ export default function StudentCategoryPerformanceReport({
               }}
             />
           </div>
-
           {error && <div className="alert alert-danger mt-3">{error}</div>}
-          {report && renderReportBody()}
         </ReportFormShell>
       )}
     </Layout>

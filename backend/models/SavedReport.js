@@ -28,6 +28,10 @@ const SavedReportSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.Mixed,
       required: true,
     },
+    lastRerunAt: {
+      type: Date,
+      default: null,
+    },
   },
   { timestamps: true }
 );

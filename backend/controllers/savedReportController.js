@@ -25,6 +25,7 @@ const toListItem = (report) => ({
   dateCreated: report.createdAt ? new Date(report.createdAt).toLocaleDateString() : "",
   createdAt: report.createdAt,
   updatedAt: report.updatedAt,
+  lastRerunAt: report.lastRerunAt,
 });
 
 const toDetailItem = (report) => ({
@@ -36,6 +37,7 @@ const toDetailItem = (report) => ({
   dateCreated: report.createdAt ? new Date(report.createdAt).toLocaleDateString() : "",
   createdAt: report.createdAt,
   updatedAt: report.updatedAt,
+  lastRerunAt: report.lastRerunAt,
   config: report.config,
   reportData: report.reportData,
 });
@@ -86,6 +88,7 @@ export const createSavedReport = async (req, res) => {
       ...payload,
       courseName: payload.courseName || reportData.courseName || "",
       reportData,
+      lastRerunAt: null,
     });
 
     res.status(201).json({
@@ -137,6 +140,7 @@ export const rerunSavedReport = async (req, res) => {
     const reportData = await buildSnapshot(report.type, report.config);
     report.courseName = report.courseName || reportData.courseName || "";
     report.reportData = reportData;
+    report.lastRerunAt = new Date();
 
     const updated = await report.save();
 
@@ -162,4 +166,3 @@ export const deleteSavedReport = async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 };
-
