@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Layout from "../shared/Layout";
 import SelectReportType from "./SelectReportType";
 
-export default function App() {
+export default function AdvancedReportsPage() {
   const [view, setView] = useState("list");
   const [viewConfig, setViewConfig] = useState(null);
   const [reports, setReports] = useState([]);
+  const [loadingReportId, setLoadingReportId] = useState(null);
 
   const fetchReports = async () => {
     try {
@@ -25,6 +26,24 @@ export default function App() {
     fetchReports();
   };
 
+  const handleViewReport = async (report) => {
+    setLoadingReportId(report.id);
+    try {
+      const res = await fetch(`http://localhost:5000/api/saved-reports/${report.id}`, {
+        cache: "no-store",
+      });
+      const json = await res.json();
+      if (json.success) {
+        setViewConfig(json.data);
+        setView("selectType");
+      }
+    } catch {
+      // ignore
+    } finally {
+      setLoadingReportId(null);
+    }
+  };
+
   if (view === "selectType") {
     return (
       <SelectReportType
@@ -36,17 +55,18 @@ export default function App() {
   }
 
   return (
-    <AdvancedReports
-      onCreateNew={() => { setView("selectType"); setViewConfig(null); }}
-      onViewReport={(r) => { setView("selectType"); setViewConfig(r); }}
+    <AdvancedReportsPageContent
+      onCreateNew={() => { setView("list"); setViewConfig(null); setView("selectType"); }}
+      onViewReport={handleViewReport}
       reports={reports}
+      loadingReportId={loadingReportId}
     />
   );
 }
 
-function AdvancedReports({ onCreateNew, onViewReport, reports }) {
+function AdvancedReportsPageContent({ onCreateNew, onViewReport, reports, loadingReportId }) {
   const [search,       setSearch]      = useState("");
-  const [itemsPerPage, setItemsPerPage] = useState(50);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
   const [selectedIds,  setSelectedIds]  = useState([]);
   const [sortCol,      setSortCol]      = useState("name");
   const [sortDir,      setSortDir]      = useState("asc");
@@ -62,13 +82,12 @@ function AdvancedReports({ onCreateNew, onViewReport, reports }) {
     return A < B ? (sortDir === "asc" ? -1 : 1) : A > B ? (sortDir === "asc" ? 1 : -1) : 0;
   });
 
-  // Reset to first page if search changes or items per page changes and total pages shrink
   const totalPages = Math.ceil(sorted.length / itemsPerPage) || 1;
-  useEffect(() => {
-    if (currentPage > totalPages) setCurrentPage(1);
-  }, [totalPages, currentPage]);
-
-  const displayed   = sorted.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  const effectiveCurrentPage = Math.min(currentPage, totalPages);
+  const displayed = sorted.slice(
+    (effectiveCurrentPage - 1) * itemsPerPage,
+    effectiveCurrentPage * itemsPerPage,
+  );
   const allChecked  = displayed.length > 0 && displayed.every((r) => selectedIds.includes(r.id));
   const toggleAll   = () => setSelectedIds(allChecked ? [] : displayed.map((r) => r.id));
   const toggleOne   = (id) => setSelectedIds((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id]);
@@ -145,7 +164,7 @@ function AdvancedReports({ onCreateNew, onViewReport, reports }) {
         </div>
 
         <div className="d-flex mb-3">
-          <div className="search-wrapper">
+          <div className="search-wrapper me-0" style={{ flex: 1 }}>
             <span className="search-icon">
               <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                 <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
@@ -153,7 +172,7 @@ function AdvancedReports({ onCreateNew, onViewReport, reports }) {
             </span>
             <input
               className="search-box"
-              style={{ borderRadius: "4px" }}
+              style={{ borderRight: "none", borderRadius: "4px 0 0 4px" }}
               placeholder="Find a Report"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -174,12 +193,14 @@ function AdvancedReports({ onCreateNew, onViewReport, reports }) {
                   { col: "name",        label: "REPORT NAME" },
                   { col: "type",        label: "REPORT TYPE" },
                   { col: "department",  label: "DEPARTMENT" },
+                  { col: "courseName",  label: "COURSES" },
                   { col: "dateCreated", label: "DATE CREATED" },
                 ].map(({ col, label }) => (
                   <th
                     key={col}
                     onClick={() => handleSort(col)}
                     className={sortCol === col ? "active" : ""}
+                    style={col === "courseName" ? { textAlign: "center" } : {}}
                   >
                     {label} &nbsp;<SortIcon col={col} />
                   </th>
@@ -195,12 +216,28 @@ function AdvancedReports({ onCreateNew, onViewReport, reports }) {
               ) : displayed.map((r) => (
                 <tr key={r.id}>
                   <td><input type="checkbox" className="row-checkbox" checked={selectedIds.includes(r.id)} onChange={() => toggleOne(r.id)} /></td>
-                  <td><a href="#" className="report-link" onClick={(e) => { e.preventDefault(); onViewReport(r); }}>{r.name}</a></td>
-                  <td>{r.type}</td>
-                  <td>{r.department}</td>
-                  <td>{r.dateCreated}</td>
                   <td>
-                    <button className="btn btn-sm btn-outline-primary" onClick={() => onViewReport(r)}>View</button>
+                    <a href="#" className="report-link" onClick={(e) => { e.preventDefault(); onViewReport(r); }}>
+                      {loadingReportId === r.id ? "Loading..." : r.name}
+                    </a>
+                  </td>
+                  <td>{r.type}</td>
+                  <td>{r.department || "Jamia Darussalam"}</td>
+                  <td style={{ textAlign: "center" }}>
+                    <a href="#" className="courses-badge" onClick={(e) => { e.preventDefault(); onViewReport(r); }}>
+                      {r.courseName ? "1" : "0"}
+                    </a>
+                  </td>
+                  <td>{r.dateCreated || (r.createdAt ? new Date(r.createdAt).toLocaleDateString() : "")}</td>
+                  <td>
+                    <button
+                      className="btn btn-sm btn-outline-primary"
+                      style={{ fontSize: '11px', fontWeight: 600, padding: '4px 10px' }}
+                      onClick={() => onViewReport(r)}
+                      disabled={loadingReportId === r.id}
+                    >
+                      {loadingReportId === r.id ? "Loading..." : "View"}
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -214,19 +251,19 @@ function AdvancedReports({ onCreateNew, onViewReport, reports }) {
           <div className="d-flex justify-content-center align-items-center mt-4 gap-2">
             <button 
               className="btn btn-sm btn-outline-secondary" 
-              disabled={currentPage === 1} 
-              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={effectiveCurrentPage === 1} 
+              onClick={() => setCurrentPage((page) => Math.max(1, Math.min(page, totalPages) - 1))}
               style={{ fontSize: "12px", border: "1px solid #ccc" }}
             >
               Previous
             </button>
             <span style={{ fontSize: "13px", color: "#555", fontWeight: 500, margin: "0 8px" }}>
-              Page {currentPage} of {totalPages}
+              Page {effectiveCurrentPage} of {totalPages}
             </span>
             <button 
               className="btn btn-sm btn-outline-secondary" 
-              disabled={currentPage === totalPages} 
-              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={effectiveCurrentPage === totalPages} 
+              onClick={() => setCurrentPage((page) => Math.min(totalPages, Math.min(page, totalPages) + 1))}
               style={{ fontSize: "12px", border: "1px solid #ccc" }}
             >
               Next

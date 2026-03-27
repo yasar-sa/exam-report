@@ -1,12 +1,10 @@
-import MainScreen from './components/MainScreen'
-import AdvancedReports from './components/reports/AdvancedReports'
+import AdvancedReportsPage from './components/reports/AdvancedReports'
 
 function App() {
 
   return (
     <div>
-      {/* <MainScreen /> */}
-      <AdvancedReports />
+      <AdvancedReportsPage />
     </div>
   );
 }

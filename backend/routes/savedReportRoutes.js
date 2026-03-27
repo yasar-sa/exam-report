@@ -1,8 +1,10 @@
 import express from "express";
 import {
   getSavedReports,
+  getSavedReportById,
   createSavedReport,
   updateSavedReport,
+  rerunSavedReport,
   deleteSavedReport
 } from "../controllers/savedReportController.js";
 
@@ -13,7 +15,10 @@ router.route("/")
   .post(createSavedReport);
 
 router.route("/:id")
+  .get(getSavedReportById)
   .put(updateSavedReport)
   .delete(deleteSavedReport);
+
+router.post("/:id/rerun", rerunSavedReport);
 
 export default router;
