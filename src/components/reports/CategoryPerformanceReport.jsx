@@ -39,7 +39,9 @@ export default function CategoryPerformanceReport({ initialConfig }) {
     initialConfig?.config?.sliderValues || defaultSliderValues,
   );
   const [selectedAssessmentIds, setSelectedAssessmentIds] = useState(
-    initialConfig?.config?.selectedAssessmentIds || initialConfig?.reportData?.selectedAssessmentIds || [],
+    initialConfig?.config?.selectedAssessmentIds ||
+      initialConfig?.reportData?.selectedAssessmentIds ||
+      [],
   );
   const [courses, setCourses] = useState([]);
   const [courseAssessments, setCourseAssessments] = useState([]);
@@ -51,6 +53,12 @@ export default function CategoryPerformanceReport({ initialConfig }) {
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   const [expandedAssessmentIds, setExpandedAssessmentIds] = useState({});
   const [lastRerunAt, setLastRerunAt] = useState(initialConfig?.lastRerunAt || null);
+  const [rerunHistory, setRerunHistory] = useState(initialConfig?.rerunHistory || []);
+  const [showHistory, setShowHistory] = useState(false);
+
+  // Per-assessment student pagination state
+  // Structure: { [assessmentId]: { data: [], pagination: {}, loading: false, page: 1 } }
+  const [assessmentData, setAssessmentData] = useState({});
 
   const shouldLoadCourses = isEditing || !initialConfig;
 
@@ -124,6 +132,39 @@ export default function CategoryPerformanceReport({ initialConfig }) {
     );
   }, [courseAssessments]);
 
+  const fetchAssessmentStudents = async (assessmentId, page = 1) => {
+    if (!reportDbId) return;
+
+    setAssessmentData((prev) => ({
+      ...prev,
+      [assessmentId]: { ...(prev[assessmentId] || {}), loading: true, page },
+    }));
+
+    try {
+      const res = await fetch(
+        `${API_BASE}/api/saved-reports/${reportDbId}/students?page=${page}&limit=10&assessmentId=${assessmentId}`,
+      );
+      const json = await res.json();
+      if (json.success) {
+        setAssessmentData((prev) => ({
+          ...prev,
+          [assessmentId]: {
+            data: json.data || [],
+            pagination: json.pagination,
+            loading: false,
+            page,
+          },
+        }));
+      }
+    } catch (e) {
+      console.error("Failed to fetch assessment students:", e);
+      setAssessmentData((prev) => ({
+        ...prev,
+        [assessmentId]: { ...(prev[assessmentId] || {}), loading: false },
+      }));
+    }
+  };
+
   const goBack = () => {
     navigate(initialConfig ? "/" : "/reports/new");
   };
@@ -152,7 +193,9 @@ export default function CategoryPerformanceReport({ initialConfig }) {
     setSliderValues(savedReport.config?.sliderValues || defaultSliderValues);
     setSelectedAssessmentIds(savedReport.config?.selectedAssessmentIds || []);
     setLastRerunAt(savedReport.lastRerunAt || null);
+    setRerunHistory(savedReport.rerunHistory || []);
     setExpandedAssessmentIds({});
+    setAssessmentData({}); // Clear cached student data
     setIsEditing(false);
   };
 
@@ -259,10 +302,16 @@ export default function CategoryPerformanceReport({ initialConfig }) {
   };
 
   const toggleAssessmentRow = (assessmentId) => {
+    const isExpanding = !expandedAssessmentIds[assessmentId];
     setExpandedAssessmentIds((prev) => ({
       ...prev,
-      [assessmentId]: !prev[assessmentId],
+      [assessmentId]: isExpanding,
     }));
+
+    // If expanding and data doesn't exist, fetch it
+    if (isExpanding && !assessmentData[assessmentId]) {
+      fetchAssessmentStudents(assessmentId, 1);
+    }
   };
 
   const toggleFormAssessment = (assessmentId) => {
@@ -295,12 +344,12 @@ export default function CategoryPerformanceReport({ initialConfig }) {
             flexWrap: "wrap",
           }}
         >
-          <span>
+          {/* <span>
             <strong style={{ color: "#d32f2f" }}>
               At-Risk Course: {report?.summary?.atRiskCourseCount ?? 0}
             </strong>{" "}
             | Total Courses: {report?.summary?.totalCourses ?? 0}
-          </span>
+          </span> */}
           <span>
             Assessments Filter:{" "}
             {report?.selectedAssessmentIds?.length
@@ -332,8 +381,10 @@ export default function CategoryPerformanceReport({ initialConfig }) {
 
         <div style={{ fontSize: "12px", color: "#666", marginBottom: "20px" }}>
           At-Risk Assessments: {atRiskAssessmentsCount} | Total Assessments: {totalAssessmentsCount} |
-          Total Quizzes: {report?.assessments?.filter((assessment) => assessment.type === "Quiz").length || 0}
-          {" | "}Total Exams: {report?.assessments?.filter((assessment) => assessment.type === "Exam").length || 0}
+          Total Quizzes:{" "}
+          {report?.assessments?.filter((assessment) => assessment.type === "Quiz").length || 0}
+          {" | "}Total Exams:{" "}
+          {report?.assessments?.filter((assessment) => assessment.type === "Exam").length || 0}
           {" | "}Total Assignments:{" "}
           {report?.assessments?.filter((assessment) => assessment.type === "Assignment").length || 0}
         </div>
@@ -345,7 +396,10 @@ export default function CategoryPerformanceReport({ initialConfig }) {
           <div style={{ fontSize: 13, fontWeight: 700, color: "#333", textTransform: "uppercase" }}>
             Assessments
           </div>
-          <div className="d-flex flex-wrap gap-2 gap-sm-3 align-items-center" style={{ fontSize: 11, color: "#555" }}>
+          <div
+            className="d-flex flex-wrap gap-2 gap-sm-3 align-items-center"
+            style={{ fontSize: 11, color: "#555" }}
+          >
             <span>
               <svg width="10" height="10" style={{ fill: "#d32f2f", transform: "translateY(2px)" }}>
                 <path d="M0,0 L10,0 L5,8 Z" />
@@ -362,178 +416,329 @@ export default function CategoryPerformanceReport({ initialConfig }) {
         </div>
 
         <div className="table-responsive" style={{ borderRadius: "3px" }}>
-          <table className="table" style={{ border: "1px solid #ddd", borderBottom: "none", minWidth: "850px" }}>
+          <table
+            className="table"
+            style={{ border: "1px solid #ddd", borderBottom: "none", minWidth: "850px" }}
+          >
             <thead>
-              <tr style={{ background: "#516275", color: "#fff", fontSize: "10px", letterSpacing: "0.5px" }}>
+              <tr
+                style={{
+                  background: "#516275",
+                  color: "#fff",
+                  fontSize: "10px",
+                  letterSpacing: "0.5px",
+                }}
+              >
                 <th style={{ padding: "12px 16px", fontWeight: "600", border: "none" }}>NAME</th>
                 <th style={{ padding: "12px 16px", fontWeight: "600", border: "none" }}>TYPE</th>
-                <th style={{ padding: "12px 16px", fontWeight: "600", border: "none" }}>SCHEDULED ON</th>
-                <th style={{ padding: "12px 16px", fontWeight: "600", border: "none" }}>AVG SCORE</th>
+                <th style={{ padding: "12px 16px", fontWeight: "600", border: "none" }}>
+                  SCHEDULED ON
+                </th>
+                <th style={{ padding: "12px 16px", fontWeight: "600", border: "none" }}>
+                  AVG SCORE
+                </th>
                 <th style={{ padding: "12px 16px", fontWeight: "600", border: "none" }}>STATUS</th>
-                <th style={{ padding: "12px 16px", fontWeight: "600", border: "none", width: "120px" }} />
+                <th
+                  style={{ padding: "12px 16px", fontWeight: "600", border: "none", width: "120px" }}
+                />
               </tr>
             </thead>
             <tbody>
               {report?.assessments?.length ? (
-                report.assessments.map((assessment) => (
-                  <Fragment key={assessment._id}>
-                    <tr style={{ borderBottom: "1px solid #ddd", background: "white" }}>
-                      <td style={{ verticalAlign: "middle", padding: "12px 16px" }}>
-                        <div style={{ fontSize: "13px", color: "#333", marginBottom: "4px" }}>{assessment.name}</div>
-                        <div
-                          style={{
-                            position: "relative",
-                            width: "100%",
-                            height: "8px",
-                            background: "#e0e0e0",
-                            borderRadius: "1px",
-                            marginTop: "15px",
-                          }}
-                        >
+                report.assessments.map((assessment) => {
+                  const assessmentDetail = assessmentData[assessment._id] || {};
+                  const studentsList = assessmentDetail.data || [];
+                  const p = assessmentDetail.pagination || {};
+
+                  return (
+                    <Fragment key={assessment._id}>
+                      <tr style={{ borderBottom: "1px solid #ddd", background: "white" }}>
+                        <td style={{ verticalAlign: "middle", padding: "12px 16px" }}>
+                          <div style={{ fontSize: "13px", color: "#333", marginBottom: "4px" }}>
+                            {assessment.name}
+                          </div>
                           <div
                             style={{
-                              position: "absolute",
-                              left: `${Math.min(100, Math.max(0, assessment.avgScore || 0))}%`,
-                              top: "-6px",
-                              transform: "translateX(-50%)",
+                              position: "relative",
+                              width: "100%",
+                              height: "8px",
+                              background: "#e0e0e0",
+                              borderRadius: "1px",
+                              marginTop: "15px",
                             }}
                           >
-                            <svg width="12" height="12" viewBox="0 0 10 10" style={{ fill: "none", stroke: "#cfa625", strokeWidth: "2" }}>
-                              <path d="M5 1L9 5L5 9L1 5Z" />
-                            </svg>
-                          </div>
-                        </div>
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            fontSize: "10px",
-                            color: "#999",
-                            marginTop: "2px",
-                          }}
-                        >
-                          <span>0</span>
-                          <span>50</span>
-                          <span>100</span>
-                        </div>
-                      </td>
-                      <td style={{ verticalAlign: "middle", fontSize: "13px", color: "#333", padding: "12px 16px" }}>
-                        {assessment.type.toUpperCase()}
-                      </td>
-                      <td style={{ verticalAlign: "middle", fontSize: "13px", color: "#333", padding: "12px 16px" }}>
-                        {assessment.date ? new Date(assessment.date).toLocaleDateString() : "-"}
-                      </td>
-                      <td style={{ verticalAlign: "middle", fontSize: "13px", color: "#333", padding: "12px 16px" }}>
-                        {Number(assessment.avgScore ?? 0).toFixed(2)}%
-                      </td>
-                      <td style={{ verticalAlign: "middle", padding: "12px 16px" }}>
-                        {assessment.status === "At Risk" ? (
-                          <svg width="12" height="12" style={{ fill: "#d32f2f" }}>
-                            <path d="M0,0 L12,0 L6,10 Z" />
-                          </svg>
-                        ) : (
-                          <svg width="12" height="12" style={{ fill: "#388e3c" }}>
-                            <path d="M6,0 L12,10 L0,10 Z" />
-                          </svg>
-                        )}
-                      </td>
-                      <td style={{ verticalAlign: "middle", padding: "12px 16px", textAlign: "right" }}>
-                        <a
-                          href="#"
-                          style={{ color: "#1a73c1", fontSize: "13px", textDecoration: "none" }}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            toggleAssessmentRow(assessment._id);
-                          }}
-                        >
-                          {expandedAssessmentIds[assessment._id] ? "Hide Student List" : "Student List"}
-                        </a>
-                      </td>
-                    </tr>
-
-                    {expandedAssessmentIds[assessment._id] ? (
-                      <tr>
-                        <td colSpan={6} style={{ padding: 0 }}>
-                          <div style={{ padding: "0 0 0 40px", background: "#f5f5f5" }}>
                             <div
                               style={{
-                                display: "flex",
-                                alignItems: "center",
-                                padding: "15px 15px 10px",
-                                fontSize: "12px",
-                                color: "#666",
+                                position: "absolute",
+                                left: `${Math.min(100, Math.max(0, assessment.avgScore || 0))}%`,
+                                top: "-6px",
+                                transform: "translateX(-50%)",
                               }}
                             >
-                              Saved Students Snapshot
-                            </div>
-                            <div className="table-responsive" style={{ borderRadius: "3px" }}>
-                              <table
-                                className="table mb-0"
-                                style={{ borderLeft: "1px solid #ddd", borderRight: "1px solid #ddd", minWidth: "600px" }}
+                              <svg
+                                width="12"
+                                height="12"
+                                viewBox="0 0 10 10"
+                                style={{ fill: "none", stroke: "#cfa625", strokeWidth: "2" }}
                               >
-                                <thead>
-                                  <tr style={{ background: "#516275", color: "#fff", fontSize: "11px", letterSpacing: "0.5px" }}>
-                                    <th style={{ fontWeight: "600", padding: "10px 15px", border: "none" }}>LAST NAME</th>
-                                    <th style={{ fontWeight: "600", padding: "10px 15px", border: "none" }}>FIRST NAME</th>
-                                    <th style={{ fontWeight: "600", padding: "10px 15px", border: "none" }}>ASSESSMENT SCORE</th>
-                                    <th style={{ fontWeight: "600", padding: "10px 15px", border: "none" }}>STATUS</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {assessment.students?.length ? (
-                                    assessment.students.map((student) => (
-                                      <tr
-                                        key={`${assessment._id}-${student.name}-${student.score}`}
-                                        style={{ background: "white", borderBottom: "1px solid #ddd" }}
-                                      >
-                                        <td style={{ padding: "12px 15px", fontSize: "13px", color: "#333" }}>
-                                          {student.lastName || "-"}
-                                        </td>
-                                        <td style={{ padding: "12px 15px", fontSize: "13px", color: "#333" }}>
-                                          {student.firstName || "-"}
-                                        </td>
-                                        <td style={{ padding: "12px 15px", fontSize: "13px", color: "#333" }}>
-                                          {Number(student.score ?? 0).toFixed(2)}%
-                                        </td>
-                                        <td style={{ padding: "12px 15px" }}>
-                                          {student.status === "At Risk" ? (
-                                            <svg width="12" height="12" style={{ fill: "#d32f2f" }}>
-                                              <path d="M0,0 L12,0 L6,10 Z" />
-                                            </svg>
-                                          ) : (
-                                            <svg width="12" height="12" style={{ fill: "#388e3c" }}>
-                                              <path d="M6,0 L12,10 L0,10 Z" />
-                                            </svg>
-                                          )}
-                                        </td>
-                                      </tr>
-                                    ))
-                                  ) : (
-                                    <tr style={{ background: "white", borderBottom: "1px solid #ddd" }}>
-                                      <td colSpan={4} className="text-muted" style={{ padding: "15px" }}>
-                                        No students found.
-                                      </td>
-                                    </tr>
-                                  )}
-                                </tbody>
-                              </table>
+                                <path d="M5 1L9 5L5 9L1 5Z" />
+                              </svg>
                             </div>
-                            <div
-                              style={{
-                                height: "15px",
-                                background: "white",
-                                borderLeft: "1px solid #ddd",
-                                borderRight: "1px solid #ddd",
-                                borderBottom: "1px solid #ddd",
-                                marginBottom: "20px",
-                              }}
-                            />
+                          </div>
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              fontSize: "10px",
+                              color: "#999",
+                              marginTop: "2px",
+                            }}
+                          >
+                            <span>0</span>
+                            <span>50</span>
+                            <span>100</span>
                           </div>
                         </td>
+                        <td
+                          style={{
+                            verticalAlign: "middle",
+                            fontSize: "13px",
+                            color: "#333",
+                            padding: "12px 16px",
+                          }}
+                        >
+                          {assessment.type.toUpperCase()}
+                        </td>
+                        <td
+                          style={{
+                            verticalAlign: "middle",
+                            fontSize: "13px",
+                            color: "#333",
+                            padding: "12px 16px",
+                          }}
+                        >
+                          {assessment.date ? new Date(assessment.date).toLocaleDateString() : "-"}
+                        </td>
+                        <td
+                          style={{
+                            verticalAlign: "middle",
+                            fontSize: "13px",
+                            color: "#333",
+                            padding: "12px 16px",
+                          }}
+                        >
+                          {Number(assessment.avgScore ?? 0).toFixed(2)}%
+                        </td>
+                        <td style={{ verticalAlign: "middle", padding: "12px 16px" }}>
+                          {assessment.status === "At Risk" ? (
+                            <svg width="12" height="12" style={{ fill: "#d32f2f" }}>
+                              <path d="M0,0 L12,0 L6,10 Z" />
+                            </svg>
+                          ) : (
+                            <svg width="12" height="12" style={{ fill: "#388e3c" }}>
+                              <path d="M6,0 L12,10 L0,10 Z" />
+                            </svg>
+                          )}
+                        </td>
+                        <td
+                          style={{ verticalAlign: "middle", padding: "12px 16px", textAlign: "right" }}
+                        >
+                          <a
+                            href="#"
+                            style={{ color: "#1a73c1", fontSize: "13px", textDecoration: "none" }}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              toggleAssessmentRow(assessment._id);
+                            }}
+                          >
+                            {expandedAssessmentIds[assessment._id]
+                              ? "Hide Student List"
+                              : "Student List"}
+                          </a>
+                        </td>
                       </tr>
-                    ) : null}
-                  </Fragment>
-                ))
+
+                      {expandedAssessmentIds[assessment._id] ? (
+                        <tr>
+                          <td colSpan={6} style={{ padding: 0 }}>
+                            <div style={{ padding: "0 0 0 40px", background: "#f5f5f5" }}>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  alignItems: "center",
+                                  padding: "15px 15px 10px",
+                                  fontSize: "12px",
+                                  color: "#666",
+                                }}
+                              >
+                                <span>Saved Students Snapshot</span>
+                                {assessmentDetail.loading && (
+                                  <div className="spinner-border spinner-border-sm text-primary" role="status">
+                                    <span className="visually-hidden">Loading...</span>
+                                  </div>
+                                )}
+                              </div>
+                              <div className="table-responsive" style={{ borderRadius: "3px" }}>
+                                <table
+                                  className="table mb-0"
+                                  style={{
+                                    borderLeft: "1px solid #ddd",
+                                    borderRight: "1px solid #ddd",
+                                    minWidth: "600px",
+                                  }}
+                                >
+                                  <thead>
+                                    <tr
+                                      style={{
+                                        background: "#516275",
+                                        color: "#fff",
+                                        fontSize: "11px",
+                                        letterSpacing: "0.5px",
+                                      }}
+                                    >
+                                      <th
+                                        style={{
+                                          fontWeight: "600",
+                                          padding: "10px 15px",
+                                          border: "none",
+                                        }}
+                                      >
+                                        LAST NAME
+                                      </th>
+                                      <th
+                                        style={{
+                                          fontWeight: "600",
+                                          padding: "10px 15px",
+                                          border: "none",
+                                        }}
+                                      >
+                                        FIRST NAME
+                                      </th>
+                                      <th
+                                        style={{
+                                          fontWeight: "600",
+                                          padding: "10px 15px",
+                                          border: "none",
+                                        }}
+                                      >
+                                        ASSESSMENT SCORE
+                                      </th>
+                                      <th
+                                        style={{
+                                          fontWeight: "600",
+                                          padding: "10px 15px",
+                                          border: "none",
+                                        }}
+                                      >
+                                        STATUS
+                                      </th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {studentsList.length ? (
+                                      studentsList.map((student) => (
+                                        <tr
+                                          key={`${assessment._id}-${student.firstName}-${student.lastName}-${student.score}`}
+                                          style={{
+                                            background: "white",
+                                            borderBottom: "1px solid #ddd",
+                                          }}
+                                        >
+                                          <td
+                                            style={{
+                                              padding: "12px 15px",
+                                              fontSize: "13px",
+                                              color: "#333",
+                                            }}
+                                          >
+                                            {student.lastName || "-"}
+                                          </td>
+                                          <td
+                                            style={{
+                                              padding: "12px 15px",
+                                              fontSize: "13px",
+                                              color: "#333",
+                                            }}
+                                          >
+                                            {student.firstName || "-"}
+                                          </td>
+                                          <td
+                                            style={{
+                                              padding: "12px 15px",
+                                              fontSize: "13px",
+                                              color: "#333",
+                                            }}
+                                          >
+                                            {Number(student.score ?? 0).toFixed(2)}%
+                                          </td>
+                                          <td style={{ padding: "12px 15px" }}>
+                                            {student.status === "At Risk" ? (
+                                              <svg width="12" height="12" style={{ fill: "#d32f2f" }}>
+                                                <path d="M0,0 L12,0 L6,10 Z" />
+                                              </svg>
+                                            ) : (
+                                              <svg width="12" height="12" style={{ fill: "#388e3c" }}>
+                                                <path d="M6,0 L12,10 L0,10 Z" />
+                                              </svg>
+                                            )}
+                                          </td>
+                                        </tr>
+                                      ))
+                                    ) : (
+                                      <tr style={{ background: "white", borderBottom: "1px solid #ddd" }}>
+                                        <td colSpan={4} className="text-muted" style={{ padding: "15px" }}>
+                                          {assessmentDetail.loading ? "Loading..." : "No students found."}
+                                        </td>
+                                      </tr>
+                                    )}
+                                  </tbody>
+                                </table>
+                              </div>
+
+                              {/* Per-assessment pagination footer */}
+                              {p.pages > 1 && (
+                                <div className="d-flex justify-content-between align-items-center p-3 bg-white" style={{ border: "1px solid #ddd", borderTop: "none" }}>
+                                  <div style={{ fontSize: "11px", color: "#666" }}>
+                                    Showing {studentsList.length} of {p.total} (Page {assessmentDetail.page} of {p.pages})
+                                  </div>
+                                  <div className="d-flex gap-2">
+                                    <button
+                                      className="btn btn-sm btn-outline-secondary"
+                                      disabled={assessmentDetail.page === 1 || assessmentDetail.loading}
+                                      onClick={() => fetchAssessmentStudents(assessment._id, assessmentDetail.page - 1)}
+                                      style={{ fontSize: "11px", padding: "2px 8px" }}
+                                    >
+                                      Prev
+                                    </button>
+                                    <button
+                                      className="btn btn-sm btn-outline-secondary"
+                                      disabled={assessmentDetail.page === p.pages || assessmentDetail.loading}
+                                      onClick={() => fetchAssessmentStudents(assessment._id, assessmentDetail.page + 1)}
+                                      style={{ fontSize: "11px", padding: "2px 8px" }}
+                                    >
+                                      Next
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                              <div
+                                style={{
+                                  height: "15px",
+                                  background: "white",
+                                  borderLeft: "1px solid #ddd",
+                                  borderRight: "1px solid #ddd",
+                                  borderBottom: "1px solid #ddd",
+                                  marginBottom: "20px",
+                                }}
+                              />
+                            </div>
+                          </td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
+                  );
+                })
               ) : (
                 <tr>
                   <td colSpan={6} className="text-muted py-4 text-center" style={{ background: "white" }}>
@@ -558,7 +763,16 @@ export default function CategoryPerformanceReport({ initialConfig }) {
           >
             <div>
               <button className="back-link mb-2" onClick={goBack}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <path d="M19 12H5M12 5l-7 7 7 7" />
                 </svg>
                 Back to Advanced Reports
@@ -583,7 +797,14 @@ export default function CategoryPerformanceReport({ initialConfig }) {
                     borderRadius: "4px",
                   }}
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
                     <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                   </svg>
                   {isConfirmingDelete ? "CONFIRM DELETE?" : "DELETE"}
@@ -601,7 +822,14 @@ export default function CategoryPerformanceReport({ initialConfig }) {
                     gap: "4px",
                   }}
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
                     <circle cx="12" cy="12" r="3" />
                     <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
                   </svg>
@@ -624,7 +852,66 @@ export default function CategoryPerformanceReport({ initialConfig }) {
                   {isGenerating ? "RERUNNING..." : "RERUN REPORT"}
                 </button>
               </div>
-              <div style={{ fontSize: "11px", color: "#666" }}>{rerunLabel}</div>
+              <div className="d-flex align-items-center gap-2" style={{ fontSize: "11px", color: "#666" }}>
+                <span>{rerunLabel}</span>
+                {rerunHistory.length > 0 && (
+                  <button
+                    onClick={() => setShowHistory(!showHistory)}
+                    style={{
+                      border: "none",
+                      background: "none",
+                      color: "#1a73c1",
+                      padding: 0,
+                      fontSize: "11px",
+                      textDecoration: "underline",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {showHistory ? "Hide History" : "View History Log"}
+                  </button>
+                )}
+              </div>
+
+              {showHistory && rerunHistory.length > 0 && (
+                <div
+                  className="mt-2 text-start p-2"
+                  style={{
+                    background: "#f9f9f9",
+                    border: "1px solid #ddd",
+                    borderRadius: "4px",
+                    width: "100%",
+                    maxWidth: "400px",
+                  }}
+                >
+                  <div style={{ fontSize: "10px", fontWeight: 700, color: "#555", marginBottom: "8px", textTransform: "uppercase" }}>
+                    Rerun History Log
+                  </div>
+                  <div style={{ maxHeight: "150px", overflowY: "auto" }}>
+                    <table style={{ width: "100%", fontSize: "10px", borderCollapse: "collapse" }}>
+                      <thead>
+                        <tr style={{ borderBottom: "1px solid #eee", textAlign: "left", color: "#666" }}>
+                          <th style={{ padding: "4px 0" }}>DATE</th>
+                          <th>STUDENTS</th>
+                          {/* <th>AT-RISK</th> */}
+                          <th style={{ textAlign: "right" }}>AVG</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rerunHistory.map((entry, idx) => (
+                          <tr key={idx} style={{ borderBottom: "1px solid #f0f0f0" }}>
+                            <td style={{ padding: "6px 0", color: "#333" }}>
+                              {new Date(entry.rerunAt).toLocaleString([], { dateStyle: "short", timeStyle: "short" })}
+                            </td>
+                            <td style={{ color: "#333" }}>{entry.totalStudents}</td>
+                            {/* <td style={{ color: entry.atRiskCount > 0 ? "#d32f2f" : "#333" }}>{entry.atRiskCount}</td> */}
+                            <td style={{ textAlign: "right", color: "#333" }}>{Number(entry.avgScore || 0).toFixed(1)}%</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
           {error && <div className="alert alert-danger mt-3">{error}</div>}
@@ -657,8 +944,8 @@ export default function CategoryPerformanceReport({ initialConfig }) {
               <div className="mt-4">
                 <div className="field-label">ASSESSMENTS</div>
                 <div style={{ fontSize: "12px", color: "#666", marginBottom: "10px" }}>
-                  Select one or more assessments for this course. Leave all unchecked to include every
-                  assessment in the course.
+                  Select one or more assessments for this course. Leave all unchecked to include
+                  every assessment in the course.
                 </div>
                 {!courseId ? (
                   <div className="text-muted" style={{ fontSize: "13px" }}>

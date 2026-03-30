@@ -32,6 +32,14 @@ const SavedReportSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    rerunHistory: [
+      {
+        rerunAt: { type: Date, default: Date.now },
+        totalStudents: Number,
+        atRiskCount: Number,
+        avgScore: Number,
+      },
+    ],
   },
   { timestamps: true }
 );

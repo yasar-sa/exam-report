@@ -1,4 +1,5 @@
 import SavedReport from "../models/SavedReport.js";
+import SavedReportStudent from "../models/SavedReportStudent.js";
 import {
   generateCourseReportSnapshot,
   generateStudentReportSnapshot,
@@ -39,7 +40,8 @@ const toDetailItem = (report) => ({
   updatedAt: report.updatedAt,
   lastRerunAt: report.lastRerunAt,
   config: report.config,
-  reportData: report.reportData,
+  reportData: report.reportData, // Now only contains 'summary'
+  rerunHistory: report.rerunHistory || [],
 });
 
 const normalizePayload = (body = {}) => {
@@ -52,6 +54,19 @@ const normalizePayload = (body = {}) => {
     department: body.department || "",
     config,
   };
+};
+
+const persistStudents = async (reportId, students = []) => {
+  // Wipe old students for this report
+  await SavedReportStudent.deleteMany({ savedReportId: reportId });
+
+  if (students.length > 0) {
+    const docs = students.map((s) => ({
+      ...s,
+      savedReportId: reportId,
+    }));
+    await SavedReportStudent.insertMany(docs);
+  }
 };
 
 // @route   GET /api/saved-reports
@@ -78,18 +93,53 @@ export const getSavedReportById = async (req, res) => {
   }
 };
 
+// @route   GET /api/saved-reports/:id/students
+export const getSavedReportStudents = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const assessmentId = req.query.assessmentId || null;
+    const skip = (page - 1) * limit;
+
+    const query = { savedReportId: id };
+    if (assessmentId) query.assessmentId = assessmentId;
+
+    const total = await SavedReportStudent.countDocuments(query);
+    const students = await SavedReportStudent.find(query)
+      .sort({ avgScore: -1, score: -1, lastName: 1 })
+      .skip(skip)
+      .limit(limit);
+
+    res.json({
+      success: true,
+      data: students,
+      pagination: {
+        total,
+        page,
+        limit,
+        pages: Math.ceil(total / limit),
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
+
 // @route   POST /api/saved-reports
 export const createSavedReport = async (req, res) => {
   try {
     const payload = normalizePayload(req.body);
-    const reportData = await buildSnapshot(payload.type, payload.config);
+    const { summary, students } = await buildSnapshot(payload.type, payload.config);
 
     const saved = await SavedReport.create({
       ...payload,
-      courseName: payload.courseName || reportData.courseName || "",
-      reportData,
+      courseName: payload.courseName || summary.courseName || "",
+      reportData: summary,
       lastRerunAt: null,
     });
+
+    await persistStudents(saved._id, students);
 
     res.status(201).json({
       success: true,
@@ -109,16 +159,17 @@ export const updateSavedReport = async (req, res) => {
     }
 
     const payload = normalizePayload(req.body);
-    const reportData = await buildSnapshot(payload.type, payload.config);
+    const { summary, students } = await buildSnapshot(payload.type, payload.config);
 
     existing.name = payload.name;
     existing.type = payload.type;
-    existing.courseName = payload.courseName || reportData.courseName || "";
+    existing.courseName = payload.courseName || summary.courseName || "";
     existing.department = payload.department;
     existing.config = payload.config;
-    existing.reportData = reportData;
+    existing.reportData = summary;
 
     const updated = await existing.save();
+    await persistStudents(updated._id, students);
 
     res.json({
       success: true,
@@ -137,12 +188,21 @@ export const rerunSavedReport = async (req, res) => {
       return res.status(404).json({ success: false, error: "Report not found" });
     }
 
-    const reportData = await buildSnapshot(report.type, report.config);
-    report.courseName = report.courseName || reportData.courseName || "";
-    report.reportData = reportData;
-    report.lastRerunAt = new Date();
+    const { summary, students } = await buildSnapshot(report.type, report.config);
+    report.courseName = report.courseName || summary.courseName || "";
+    report.reportData = summary;
+    const historyEntry = {
+      rerunAt: new Date(),
+      totalStudents: summary.totalStudents || 0,
+      atRiskCount: summary.atRiskStudents || summary.atRiskStudentsCount || 0,
+      avgScore: summary.avgScore || 0,
+    };
+
+    report.rerunHistory = [historyEntry, ...(report.rerunHistory || [])].slice(0, 20);
+    report.lastRerunAt = historyEntry.rerunAt;
 
     const updated = await report.save();
+    await persistStudents(updated._id, students);
 
     res.json({
       success: true,
@@ -160,6 +220,9 @@ export const deleteSavedReport = async (req, res) => {
     if (!deleted) {
       return res.status(404).json({ success: false, error: "Report not found" });
     }
+
+    // Cascading delete
+    await SavedReportStudent.deleteMany({ savedReportId: req.params.id });
 
     res.json({ success: true, data: {} });
   } catch (err) {

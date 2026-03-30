@@ -2,6 +2,7 @@ import express from "express";
 import {
   getSavedReports,
   getSavedReportById,
+  getSavedReportStudents,
   createSavedReport,
   updateSavedReport,
   rerunSavedReport,
@@ -19,6 +20,7 @@ router.route("/:id")
   .put(updateSavedReport)
   .delete(deleteSavedReport);
 
+router.get("/:id/students", getSavedReportStudents);
 router.post("/:id/rerun", rerunSavedReport);
 
 export default router;
