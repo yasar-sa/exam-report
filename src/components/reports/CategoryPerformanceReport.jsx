@@ -460,6 +460,9 @@ export default function CategoryPerformanceReport({ initialConfig }) {
                   SCHEDULED ON
                 </th>
                 <th style={{ padding: "12px 16px", fontWeight: "600", border: "none" }}>
+                  PUBLISH STATUS
+                </th>
+                <th style={{ padding: "12px 16px", fontWeight: "600", border: "none" }}>
                   AVG SCORE
                 </th>
                 <th style={{ padding: "12px 16px", fontWeight: "600", border: "none" }}>STATUS</th>
@@ -543,6 +546,21 @@ export default function CategoryPerformanceReport({ initialConfig }) {
                           }}
                         >
                           {assessment.date ? new Date(assessment.date).toLocaleDateString() : "-"}
+                        </td>
+                        <td style={{ verticalAlign: "middle", padding: "12px 16px" }}>
+                          <span
+                            style={{
+                              padding: "4px 10px",
+                              borderRadius: "12px",
+                              fontSize: "11px",
+                              fontWeight: "500",
+                              background: assessment.isPublished ? "#e8f5e9" : "#f5f5f5",
+                              color: assessment.isPublished ? "#2e7d32" : "#757575",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {assessment.isPublished ? "Published" : "Not Published"}
+                          </span>
                         </td>
                         <td
                           style={{

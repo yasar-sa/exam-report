@@ -137,66 +137,8 @@ export const generateCourseReportSnapshot = async (config = {}) => {
   withDateMatch(summaryMatch, start, end, "assessment.date");
   withDateMatch(assessmentMatch, start, end, "assessment.date");
 
-  const [courseStudents, assessments, studentRows] = await Promise.all([
-    // Aggregation 1: Per-course student averages → course-level risk summary
-    Result.aggregate([
-      {
-        $lookup: {
-          from: "assessments",
-          localField: "assessmentId",
-          foreignField: "_id",
-          as: "assessment",
-        },
-      },
-      { $unwind: "$assessment" },
-      {
-        $lookup: {
-          from: "courses",
-          localField: "assessment.courseId",
-          foreignField: "_id",
-          as: "course",
-        },
-      },
-      { $unwind: "$course" },
-      { $match: summaryMatch },
-      {
-        $group: {
-          _id: { courseId: "$course._id", studentId: "$studentId" },
-          courseName: { $first: "$course.name" },
-          studentAvgScore: { $avg: "$score" },
-        },
-      },
-      {
-        $addFields: {
-          isAtRiskStudent: { $lt: ["$studentAvgScore", thresholdStudent] },
-        },
-      },
-      {
-        $group: {
-          _id: "$_id.courseId",
-          courseName: { $first: "$courseName" },
-          avgScore: { $avg: "$studentAvgScore" },
-          totalStudents: { $sum: 1 },
-        },
-      },
-      {
-        $addFields: {
-          isAtRiskCourse: { $lt: ["$avgScore", thresholdCourse] },
-        },
-      },
-      {
-        $project: {
-          _id: 0,
-          courseId: "$_id",
-          courseName: 1,
-          avgScore: 1,
-          totalStudents: 1,
-          isAtRiskCourse: 1,
-        },
-      },
-    ]),
-
-    // Aggregation 2: Per-assessment averages and risk status
+  const [assessments, studentRows] = await Promise.all([
+    // Aggregation 1: Per-assessment averages and risk status
     Result.aggregate([
       {
         $lookup: {
@@ -214,6 +156,7 @@ export const generateCourseReportSnapshot = async (config = {}) => {
           name: { $first: "$assessment.name" },
           type: { $first: "$assessment.type" },
           date: { $first: "$assessment.date" },
+          isPublished: { $first: "$assessment.isPublished" },
           avgScore: { $avg: "$score" },
           totalStudents: { $sum: 1 },
           atRiskStudents: {
@@ -234,6 +177,7 @@ export const generateCourseReportSnapshot = async (config = {}) => {
           name: 1,
           type: 1,
           date: 1,
+          isPublished: 1,
           avgScore: 1,
           status: 1,
           totalStudents: 1,
@@ -255,7 +199,7 @@ export const generateCourseReportSnapshot = async (config = {}) => {
       { $sort: { date: -1 } },
     ]),
 
-    // Aggregation 3: Flat list of student scores per assessment
+    // Aggregation 2: Flat list of student scores per assessment
     Result.aggregate([
       {
         $lookup: {
@@ -339,7 +283,7 @@ export const generateStudentReportSnapshot = async (config = {}) => {
   if (!courses || courses.length === 0) throw new ApiError(404, "No courses found");
 
   const assessmentMatch = { "assessment.courseId": { $in: courseIds } };
-  // Removed date match for student performance report as requested
+  // Removed date match for student performance report 
   if (typeList.length > 0)
     assessmentMatch["assessment.type"] = { $in: typeList };
   if (assessmentIdList.length > 0)

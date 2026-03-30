@@ -25,6 +25,10 @@ const AssessmentSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    isPublished: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true }
 );
