@@ -31,7 +31,13 @@ export default function CategoryPerformanceReport({ initialConfig }) {
   );
   const [startDate, setStartDate] = useState(initialConfig?.config?.startDate || "");
   const [endDate, setEndDate] = useState(initialConfig?.config?.endDate || "");
-  const [courseId, setCourseId] = useState(initialConfig?.config?.courseId || "");
+  const [courseIds, setCourseIds] = useState(
+    initialConfig?.config?.courseId
+      ? typeof initialConfig.config.courseId === "string"
+        ? initialConfig.config.courseId.split(",").filter(Boolean)
+        : initialConfig.config.courseId
+      : [],
+  );
   const [assessmentTypes, setAssessmentTypes] = useState(
     initialConfig?.config?.assessmentTypes || defaultAssessmentTypes,
   );
@@ -89,7 +95,7 @@ export default function CategoryPerformanceReport({ initialConfig }) {
   }, [shouldLoadCourses]);
 
   useEffect(() => {
-    if (!courseId || !isEditing) {
+    if (!courseIds.length || !startDate || !endDate || !isEditing) {
       setCourseAssessments([]);
       return undefined;
     }
@@ -99,7 +105,9 @@ export default function CategoryPerformanceReport({ initialConfig }) {
     const loadAssessments = async () => {
       setIsLoadingAssessments(true);
       try {
-        const res = await fetch(`${API_BASE}/api/assessments?courseId=${courseId}`);
+        const res = await fetch(
+          `${API_BASE}/api/assessments?courseId=${courseIds.join(",")}&startDate=${startDate}&endDate=${endDate}`,
+        );
         const json = await res.json();
         if (!cancelled && json.success) {
           setCourseAssessments(json.data || []);
@@ -120,7 +128,7 @@ export default function CategoryPerformanceReport({ initialConfig }) {
     return () => {
       cancelled = true;
     };
-  }, [courseId, isEditing]);
+  }, [courseIds, startDate, endDate, isEditing]);
 
   useEffect(() => {
     if (!courseAssessments.length) return;
@@ -170,13 +178,16 @@ export default function CategoryPerformanceReport({ initialConfig }) {
   };
 
   const courseName = useMemo(() => {
+    if (courseIds.length > 1) {
+      return `${courseIds.length} Courses Selected`;
+    }
     return (
-      courses.find((course) => course._id === courseId)?.name ||
+      courses.find((course) => course._id === courseIds[0])?.name ||
       report?.courseName ||
       initialConfig?.courseName ||
       ""
     );
-  }, [courses, courseId, report, initialConfig]);
+  }, [courses, courseIds, report, initialConfig]);
 
   const rerunLabel = lastRerunAt
     ? `Last rerun completed on ${new Date(lastRerunAt).toLocaleString()}`
@@ -188,7 +199,13 @@ export default function CategoryPerformanceReport({ initialConfig }) {
     setReportName(savedReport.config?.reportName || savedReport.name || "");
     setStartDate(savedReport.config?.startDate || "");
     setEndDate(savedReport.config?.endDate || "");
-    setCourseId(savedReport.config?.courseId || "");
+    setCourseIds(
+      savedReport.config?.courseId
+        ? typeof savedReport.config.courseId === "string"
+          ? savedReport.config.courseId.split(",").filter(Boolean)
+          : savedReport.config.courseId
+        : [],
+    );
     setAssessmentTypes(savedReport.config?.assessmentTypes || defaultAssessmentTypes);
     setSliderValues(savedReport.config?.sliderValues || defaultSliderValues);
     setSelectedAssessmentIds(savedReport.config?.selectedAssessmentIds || []);
@@ -207,7 +224,7 @@ export default function CategoryPerformanceReport({ initialConfig }) {
       reportName,
       startDate,
       endDate,
-      courseId,
+      courseId: courseIds.join(","),
       assessmentTypes,
       sliderValues,
       selectedAssessmentIds,
@@ -215,8 +232,16 @@ export default function CategoryPerformanceReport({ initialConfig }) {
   });
 
   const generateReport = async () => {
-    if (!courseId) {
-      setError("Please select a course.");
+    if (!courseIds.length) {
+      setError("Please select at least one course.");
+      return;
+    }
+    if (!startDate || !endDate) {
+      setError("Please select both start and end dates.");
+      return;
+    }
+    if (new Date(startDate) > new Date(endDate)) {
+      setError("Start date cannot be after end date.");
       return;
     }
 
@@ -935,21 +960,23 @@ export default function CategoryPerformanceReport({ initialConfig }) {
               endDate={endDate}
               setEndDate={setEndDate}
               courses={courses}
-              courseId={courseId}
+              courseId={courseIds}
               setCourseId={(value) => {
-                setCourseId(value);
+                setCourseIds(value);
                 setSelectedAssessmentIds([]);
               }}
+              dateRequired={true}
+              isMultipleCourse={true}
             >
               <div className="mt-4">
                 <div className="field-label">ASSESSMENTS</div>
                 <div style={{ fontSize: "12px", color: "#666", marginBottom: "10px" }}>
-                  Select one or more assessments for this course. Leave all unchecked to include
-                  every assessment in the course.
+                  Select one or more assessments for the selected courses. Leave all unchecked to
+                  include every assessment in the selected courses.
                 </div>
-                {!courseId ? (
+                {!courseIds.length || !startDate || !endDate ? (
                   <div className="text-muted" style={{ fontSize: "13px" }}>
-                    Choose a course first to load its assessments.
+                    Choose courses and dates first to load assessments.
                   </div>
                 ) : isLoadingAssessments ? (
                   <div className="text-muted" style={{ fontSize: "13px" }}>
@@ -992,7 +1019,7 @@ export default function CategoryPerformanceReport({ initialConfig }) {
                   </div>
                 ) : (
                   <div className="text-muted" style={{ fontSize: "13px" }}>
-                    No assessments found for this course.
+                    No assessments found for these courses in the selected date range.
                   </div>
                 )}
               </div>

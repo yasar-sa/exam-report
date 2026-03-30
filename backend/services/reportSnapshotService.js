@@ -62,6 +62,10 @@ const buildCommonConfig = (config = {}) => {
     config.assessmentIds || config.selectedAssessmentIds,
   ).map((id) => toObjectId(id, "assessmentId"));
 
+  const courseIds = parseCommaList(config.courseId || config.courseIds).map((id) =>
+    toObjectId(id, "courseId"),
+  );
+
   return {
     startDate: config.startDate || "",
     endDate: config.endDate || "",
@@ -75,6 +79,7 @@ const buildCommonConfig = (config = {}) => {
     ),
     typeList: buildTypeList(config),
     assessmentIdList,
+    courseIds,
   };
 };
 
@@ -89,10 +94,6 @@ const withDateMatch = (target, start, end, fieldName) => {
 // ─── Course Report ────────────────────────────────────────────────────────────
 
 export const generateCourseReportSnapshot = async (config = {}) => {
-  const { courseId } = config;
-  if (!courseId) throw new ApiError(400, "courseId is required");
-
-  const courseObjId = toObjectId(courseId, "courseId");
   const {
     startDate,
     endDate,
@@ -100,16 +101,29 @@ export const generateCourseReportSnapshot = async (config = {}) => {
     thresholdStudent,
     typeList,
     assessmentIdList,
+    courseIds,
   } = buildCommonConfig(config);
+
+  if (!courseIds || courseIds.length === 0) {
+    throw new ApiError(400, "At least one courseId is required");
+  }
+
+  if (!startDate || !endDate) {
+    throw new ApiError(400, "Both 'startDate' and 'endDate' are required for Course Reports");
+  }
 
   const start = parseDate(startDate);
   const end = parseDate(endDate);
 
-  const course = await Course.findById(courseObjId).lean();
-  if (!course) throw new ApiError(404, "Course not found");
+  if (start && end && start > end) {
+    throw new ApiError(400, "'startDate' cannot be after 'endDate'");
+  }
 
-  const summaryMatch = { "course._id": courseObjId };
-  const assessmentMatch = { "assessment.courseId": courseObjId };
+  const courses = await Course.find({ _id: { $in: courseIds } }).lean();
+  if (!courses || courses.length === 0) throw new ApiError(404, "No courses found");
+
+  const summaryMatch = { "course._id": { $in: courseIds } };
+  const assessmentMatch = { "assessment.courseId": { $in: courseIds } };
 
   if (typeList.length > 0) {
     summaryMatch["assessment.type"] = { $in: typeList };
@@ -119,7 +133,7 @@ export const generateCourseReportSnapshot = async (config = {}) => {
     summaryMatch["assessment._id"] = { $in: assessmentIdList };
     assessmentMatch["assessment._id"] = { $in: assessmentIdList };
   }
-2
+
   withDateMatch(summaryMatch, start, end, "assessment.date");
   withDateMatch(assessmentMatch, start, end, "assessment.date");
 
@@ -146,7 +160,6 @@ export const generateCourseReportSnapshot = async (config = {}) => {
       { $unwind: "$course" },
       { $match: summaryMatch },
       {
-        // Step 1: Average each student's score within the course
         $group: {
           _id: { courseId: "$course._id", studentId: "$studentId" },
           courseName: { $first: "$course.name" },
@@ -159,7 +172,6 @@ export const generateCourseReportSnapshot = async (config = {}) => {
         },
       },
       {
-        // Step 2: Roll up to course level
         $group: {
           _id: "$_id.courseId",
           courseName: { $first: "$courseName" },
@@ -179,7 +191,6 @@ export const generateCourseReportSnapshot = async (config = {}) => {
           courseName: 1,
           avgScore: 1,
           totalStudents: 1,
-          atRiskStudents: 1,
           isAtRiskCourse: 1,
         },
       },
@@ -283,19 +294,15 @@ export const generateCourseReportSnapshot = async (config = {}) => {
     ]),
   ]);
 
-  const courseSummary = courseStudents[0] || {
-    courseId: course._id,
-    courseName: course.name,
-    avgScore: 0,
-    totalStudents: 0,
-    atRiskStudents: 0,
-    isAtRiskCourse: false,
-  };
+  const combinedCourseName =
+    courses.length > 1
+      ? `${courses.length} Courses (${courses.map((c) => c.name).join(", ")})`
+      : courses[0].name;
 
   return {
     summary: {
-      courseId: String(course._id),
-      courseName: course.name,
+      courseId: courseIds.map((id) => String(id)).join(","),
+      courseName: combinedCourseName,
       startedAt: startDate || "",
       endedAt: endDate || "",
       selectedTypesString: typeList.join(","),
@@ -304,18 +311,6 @@ export const generateCourseReportSnapshot = async (config = {}) => {
         studentAtRisk: thresholdStudent,
       },
       selectedAssessmentIds: assessmentIdList.map((id) => String(id)),
-      totalCourses: courseStudents.length > 0 ? courseStudents.length : 1,
-      atRiskCourseCount:
-        courseStudents.length > 0
-          ? courseStudents.filter((c) => c.isAtRiskCourse).length
-          : courseSummary.isAtRiskCourse
-            ? 1
-            : 0,
-      courses: [courseSummary],
-      avgScore: courseSummary.avgScore,
-      totalStudents: courseSummary.totalStudents,
-      atRiskStudents: courseSummary.atRiskStudents,
-      isAtRiskCourse: courseSummary.isAtRiskCourse,
       assessments,
     },
     students: studentRows.map((s) => ({
@@ -333,25 +328,22 @@ export const generateCourseReportSnapshot = async (config = {}) => {
 // ─── Student Report ───────────────────────────────────────────────────────────
 
 export const generateStudentReportSnapshot = async (config = {}) => {
-  const { courseId } = config;
-  if (!courseId) throw new ApiError(400, "courseId is required");
-
-  const courseObjId = toObjectId(courseId, "courseId");
-  const { startDate, endDate, thresholdStudent, typeList, assessmentIdList } =
+  const { thresholdStudent, typeList, assessmentIdList, courseIds } =
     buildCommonConfig(config);
 
-  const start = parseDate(startDate);
-  const end = parseDate(endDate);
+  if (!courseIds || courseIds.length === 0) {
+    throw new ApiError(400, "At least one courseId is required");
+  }
 
-  const course = await Course.findById(courseObjId).lean();
-  if (!course) throw new ApiError(404, "Course not found");
+  const courses = await Course.find({ _id: { $in: courseIds } }).lean();
+  if (!courses || courses.length === 0) throw new ApiError(404, "No courses found");
 
-  const assessmentMatch = { "assessment.courseId": courseObjId };
+  const assessmentMatch = { "assessment.courseId": { $in: courseIds } };
+  // Removed date match for student performance report as requested
   if (typeList.length > 0)
     assessmentMatch["assessment.type"] = { $in: typeList };
   if (assessmentIdList.length > 0)
     assessmentMatch["assessment._id"] = { $in: assessmentIdList };
-  withDateMatch(assessmentMatch, start, end, "assessment.date");
 
   const studentRows = await Result.aggregate([
     {
@@ -397,10 +389,10 @@ export const generateStudentReportSnapshot = async (config = {}) => {
 
   return {
     summary: {
-      courseId: String(course._id),
-      courseName: course.name,
-      startedAt: startDate || "",
-      endedAt: endDate || "",
+      courseId: courseIds.map((id) => String(id)).join(","),
+      courseName: courses.length > 1 ? `${courses.length} Courses` : courses[0].name,
+      startedAt: "", // Redundant for student report
+      endedAt: "", // Redundant for student report
       selectedTypesString: typeList.join(","),
       thresholds: {
         studentAtRisk: thresholdStudent,

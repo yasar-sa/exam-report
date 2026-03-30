@@ -21,8 +21,6 @@ export default function StudentCategoryPerformanceReport({ initialConfig }) {
   const [reportName, setReportName] = useState(
     initialConfig?.config?.reportName || initialConfig?.name || "",
   );
-  const [startDate, setStartDate] = useState(initialConfig?.config?.startDate || "");
-  const [endDate, setEndDate] = useState(initialConfig?.config?.endDate || "");
   const [courseId, setCourseId] = useState(initialConfig?.config?.courseId || "");
   const [assessmentTypes, setAssessmentTypes] = useState(
     initialConfig?.config?.assessmentTypes || defaultAssessmentTypes,
@@ -126,8 +124,6 @@ export default function StudentCategoryPerformanceReport({ initialConfig }) {
     setReportDbId(savedReport.id);
     setReport(savedReport.reportData || null);
     setReportName(savedReport.config?.reportName || savedReport.name || "");
-    setStartDate(savedReport.config?.startDate || "");
-    setEndDate(savedReport.config?.endDate || "");
     setCourseId(savedReport.config?.courseId || "");
     setAssessmentTypes(savedReport.config?.assessmentTypes || defaultAssessmentTypes);
     setSliderValues(savedReport.config?.sliderValues || { studentAtRisk: 70 });
@@ -144,8 +140,6 @@ export default function StudentCategoryPerformanceReport({ initialConfig }) {
     courseName,
     config: {
       reportName,
-      startDate,
-      endDate,
       courseId,
       assessmentTypes,
       sliderValues,
@@ -264,8 +258,7 @@ export default function StudentCategoryPerformanceReport({ initialConfig }) {
           </span>
         </div>
         <div style={{ fontSize: "11px", color: "#666", marginTop: "4px" }}>
-          Course: {report?.courseName || courseName || "Unknown"} | Date Range:{" "}
-          {report?.startedAt || "Any"} - {report?.endedAt || "Any"} | Student At Risk Threshold:{" "}
+          Course: {report?.courseName || courseName || "Unknown"} | Student At Risk Threshold:{" "}
           {report?.thresholds?.studentAtRisk ?? 0}%
         </div>
       </div>
@@ -597,13 +590,10 @@ export default function StudentCategoryPerformanceReport({ initialConfig }) {
             <ReportFormLeft
               reportName={reportName}
               setReportName={setReportName}
-              startDate={startDate}
-              setStartDate={setStartDate}
-              endDate={endDate}
-              setEndDate={setEndDate}
               courses={courses}
               courseId={courseId}
               setCourseId={setCourseId}
+              showDateRange={false}
             />
             <div className="col-divider d-none d-md-block" />
             <ReportFormRight

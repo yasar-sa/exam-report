@@ -176,7 +176,6 @@ export default function AdvancedReportsPage() {
                   {[
                     { col: "name", label: "REPORT NAME" },
                     { col: "type", label: "REPORT TYPE" },
-                    { col: "department", label: "DEPARTMENT" },
                     { col: "courseName", label: "COURSE" },
                     { col: "dateCreated", label: "DATE CREATED" },
                     // { col: "lastRerunAt", label: "LAST RERUN" },
@@ -223,7 +222,6 @@ export default function AdvancedReportsPage() {
                         </a>
                       </td>
                       <td>{report.type}</td>
-                      <td>{report.department || "Jamia Darussalam"}</td>
                       <td>{report.courseName || "-"}</td>
                       <td>{report.dateCreated || "-"}</td>
                       {/* <td>{report.lastRerunAt ? new Date(report.lastRerunAt).toLocaleString() : "Never rerun"}</td> */}

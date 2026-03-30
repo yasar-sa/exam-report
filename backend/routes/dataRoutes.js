@@ -144,6 +144,8 @@ router.get("/assessments", asyncHandler(async (req, res) => {
     search = "",
     type = "",
     courseId = "",
+    startDate = "",
+    endDate = "",
   } = req.query;
 
   const filter = {};
@@ -157,10 +159,21 @@ router.get("/assessments", asyncHandler(async (req, res) => {
   }
 
   if (courseId) {
-    if (!mongoose.Types.ObjectId.isValid(courseId)) {
-      throw new ApiError(400, "Invalid courseId");
+    const courseIds = courseId.split(",").map(id => id.trim()).filter(Boolean);
+    if (courseIds.length > 0) {
+      courseIds.forEach(id => {
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+          throw new ApiError(400, `Invalid courseId: ${id}`);
+        }
+      });
+      filter.courseId = { $in: courseIds };
     }
-    filter.courseId = courseId;
+  }
+
+  if (startDate || endDate) {
+    filter.date = {};
+    if (startDate) filter.date.$gte = new Date(startDate);
+    if (endDate) filter.date.$lte = new Date(endDate);
   }
 
   const data = await Assessment.find(filter)
