@@ -194,7 +194,9 @@ export const rerunSavedReport = async (req, res) => {
     const historyEntry = {
       rerunAt: new Date(),
       totalStudents: summary.totalStudents || 0,
-      atRiskCount: summary.atRiskStudents || summary.atRiskStudentsCount || 0,
+      totalAssessments: summary.totalAssessmentsCount || 0,
+      atRiskCount: summary.atRiskStudentsCount || summary.atRiskStudents || 0,
+      atRiskAssessments: summary.atRiskAssessmentsCount || 0,
       avgScore: summary.avgScore || 0,
     };
 

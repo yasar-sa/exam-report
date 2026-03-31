@@ -5,7 +5,6 @@ import { ApiError } from "../middleware/errorHandler.js";
 
 const DEFAULT_THRESHOLD = 60;
 
-// Parses a comma-separated string or array into a clean string array
 const parseCommaList = (value) => {
   if (!value) return [];
   if (Array.isArray(value)) {
@@ -14,27 +13,25 @@ const parseCommaList = (value) => {
       .map((s) => s.trim())
       .filter(Boolean);
   }
+
   return String(value)
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
 };
 
-// Parses a value into a valid Date, or returns null if invalid
 const parseDate = (value) => {
   if (!value) return null;
   const d = new Date(value);
   return Number.isNaN(d.getTime()) ? null : d;
 };
 
-// Parses a numeric threshold, falling back to a default if absent or invalid
 const parseThreshold = (value, fallback) => {
   if (value === undefined || value === null || value === "") return fallback;
   const num = Number(value);
   return Number.isNaN(num) ? fallback : num;
 };
 
-// Converts a string to a Mongoose ObjectId, throws 400 if invalid
 export const toObjectId = (value, fieldName) => {
   if (!mongoose.Types.ObjectId.isValid(value)) {
     throw new ApiError(400, `Invalid ObjectId for '${fieldName}'`);
@@ -42,11 +39,9 @@ export const toObjectId = (value, fieldName) => {
   return new mongoose.Types.ObjectId(value);
 };
 
-// Resolves the assessment type list from several possible config shapes
 const buildTypeList = (config = {}) => {
   if (config.types) return parseCommaList(config.types);
-  if (config.selectedTypesString)
-    return parseCommaList(config.selectedTypesString);
+  if (config.selectedTypesString) return parseCommaList(config.selectedTypesString);
   if (config.assessmentTypes && typeof config.assessmentTypes === "object") {
     return Object.entries(config.assessmentTypes)
       .filter(([, enabled]) => Boolean(enabled))
@@ -55,16 +50,8 @@ const buildTypeList = (config = {}) => {
   return [];
 };
 
-// Extracts and normalises shared filtering config (dates, thresholds, types, assessment IDs)
 const buildCommonConfig = (config = {}) => {
   const thresholds = config.sliderValues || {};
-  const assessmentIdList = parseCommaList(
-    config.assessmentIds || config.selectedAssessmentIds,
-  ).map((id) => toObjectId(id, "assessmentId"));
-
-  const courseIds = parseCommaList(config.courseId || config.courseIds).map((id) =>
-    toObjectId(id, "courseId"),
-  );
 
   return {
     startDate: config.startDate || "",
@@ -78,20 +65,273 @@ const buildCommonConfig = (config = {}) => {
       DEFAULT_THRESHOLD,
     ),
     typeList: buildTypeList(config),
-    assessmentIdList,
-    courseIds,
+    assessmentIdList: parseCommaList(
+      config.assessmentIds || config.selectedAssessmentIds,
+    ).map((id) => toObjectId(id, "assessmentId")),
+    courseIds: parseCommaList(config.courseId || config.courseIds).map((id) =>
+      toObjectId(id, "courseId"),
+    ),
   };
 };
 
-// Adds $gte/$lte date range filter onto a $match object if dates are provided
-const withDateMatch = (target, start, end, fieldName) => {
-  if (!start && !end) return;
-  target[fieldName] = {};
-  if (start) target[fieldName].$gte = start;
-  if (end) target[fieldName].$lte = end;
+const buildAssessmentMatch = ({
+  courseIds,
+  typeList,
+  assessmentIdList,
+  start,
+  end,
+  includeDate,
+}) => {
+  const match = {
+    "assessment.courseId": { $in: courseIds },
+  };
+
+  if (typeList.length > 0) {
+    match["assessment.type"] = { $in: typeList };
+  }
+
+  if (assessmentIdList.length > 0) {
+    match["assessment._id"] = { $in: assessmentIdList };
+  }
+
+  if (includeDate && (start || end)) {
+    match["assessment.date"] = {};
+    if (start) match["assessment.date"].$gte = start;
+    if (end) match["assessment.date"].$lte = end;
+  }
+
+  return match;
 };
 
-// ─── Course Report ────────────────────────────────────────────────────────────
+const buildCombinedCourseName = (courses) => {
+  if (courses.length > 1) {
+    return `${courses.length} Courses (${courses.map((course) => course.name).join(", ")})`;
+  }
+  return courses[0].name;
+};
+
+const fetchResultRows = async (assessmentMatch) => {
+  return Result.aggregate([
+    {
+      $lookup: {
+        from: "assessments",
+        localField: "assessmentId",
+        foreignField: "_id",
+        as: "assessment",
+      },
+    },
+    { $unwind: "$assessment" },
+    { $match: assessmentMatch },
+    {
+      $lookup: {
+        from: "students",
+        localField: "studentId",
+        foreignField: "_id",
+        as: "student",
+      },
+    },
+    { $unwind: "$student" },
+    {
+      $project: {
+        _id: 0,
+        assessmentId: "$assessment._id",
+        assessmentName: "$assessment.name",
+        assessmentType: "$assessment.type",
+        assessmentDate: "$assessment.date",
+        assessmentIsPublished: "$assessment.isPublished",
+        courseId: "$assessment.courseId",
+        studentId: "$student._id",
+        firstName: "$student.firstName",
+        lastName: "$student.lastName",
+        name: { $concat: ["$student.firstName", " ", "$student.lastName"] },
+        score: 1,
+      },
+    },
+    { $sort: { assessmentDate: -1, score: 1, lastName: 1, firstName: 1 } },
+  ]);
+};
+
+const buildCourseSnapshotFromRows = ({
+  rows,
+  courses,
+  courseIds,
+  startDate,
+  endDate,
+  typeList,
+  thresholdCourse,
+  thresholdStudent,
+  assessmentIdList,
+}) => {
+  const assessmentMap = new Map();
+  const studentAverageMap = new Map();
+  const students = [];
+
+  for (const row of rows) {
+    const assessmentKey = String(row.assessmentId);
+    const studentKey = String(row.studentId);
+
+    if (!assessmentMap.has(assessmentKey)) {
+      assessmentMap.set(assessmentKey, {
+        _id: row.assessmentId,
+        name: row.assessmentName,
+        type: row.assessmentType,
+        date: row.assessmentDate,
+        isPublished: row.assessmentIsPublished,
+        scoreTotal: 0,
+        totalStudents: 0,
+        atRiskStudents: 0,
+      });
+    }
+
+    const assessment = assessmentMap.get(assessmentKey);
+    assessment.scoreTotal += row.score;
+    assessment.totalStudents += 1;
+    if (row.score < thresholdStudent) {
+      assessment.atRiskStudents += 1;
+    }
+
+    if (!studentAverageMap.has(studentKey)) {
+      studentAverageMap.set(studentKey, {
+        studentId: row.studentId,
+        scoreTotal: 0,
+        count: 0,
+      });
+    }
+
+    const studentAverage = studentAverageMap.get(studentKey);
+    studentAverage.scoreTotal += row.score;
+    studentAverage.count += 1;
+
+    students.push({
+      assessmentId: row.assessmentId,
+      studentId: row.studentId,
+      firstName: row.firstName,
+      lastName: row.lastName,
+      name: row.name,
+      score: row.score,
+      status: row.score < thresholdStudent ? "At Risk" : "Good",
+    });
+  }
+
+  const assessments = Array.from(assessmentMap.values())
+    .map((assessment) => {
+      const avgScore =
+        assessment.totalStudents > 0 ? assessment.scoreTotal / assessment.totalStudents : 0;
+
+      return {
+        _id: assessment._id,
+        name: assessment.name,
+        type: assessment.type,
+        date: assessment.date,
+        isPublished: assessment.isPublished,
+        avgScore,
+        totalStudents: assessment.totalStudents,
+        atRiskStudents: assessment.atRiskStudents,
+        atRiskStudentPct:
+          assessment.totalStudents > 0
+            ? (assessment.atRiskStudents / assessment.totalStudents) * 100
+            : 0,
+        status: avgScore < thresholdCourse ? "At Risk" : "Good",
+      };
+    })
+    .sort((first, second) => new Date(second.date) - new Date(first.date));
+
+  const totalAssessmentsCount = assessments.length;
+  const atRiskAssessmentsCount = assessments.filter((a) => a.status === "At Risk").length;
+  const avgScore =
+    totalAssessmentsCount > 0
+      ? assessments.reduce((sum, a) => sum + a.avgScore, 0) / totalAssessmentsCount
+      : 0;
+
+  return {
+    summary: {
+      courseId: courseIds.map((id) => String(id)).join(","),
+      courseName: buildCombinedCourseName(courses),
+      startedAt: startDate,
+      endedAt: endDate,
+      selectedTypesString: typeList.join(","),
+      thresholds: {
+        courseAtRisk: thresholdCourse,
+        studentAtRisk: thresholdStudent,
+      },
+      selectedAssessmentIds: assessmentIdList.map((id) => String(id)),
+      totalAssessmentsCount,
+      atRiskAssessmentsCount,
+      avgScore,
+      assessments,
+    },
+    students,
+  };
+};
+
+const buildStudentSnapshotFromRows = ({
+  rows,
+  courses,
+  courseIds,
+  typeList,
+  thresholdStudent,
+  assessmentIdList,
+}) => {
+  const studentMap = new Map();
+
+  for (const row of rows) {
+    const studentKey = String(row.studentId);
+
+    if (!studentMap.has(studentKey)) {
+      studentMap.set(studentKey, {
+        _id: row.studentId,
+        firstName: row.firstName,
+        lastName: row.lastName,
+        name: row.name,
+        scoreTotal: 0,
+        count: 0,
+      });
+    }
+
+    const student = studentMap.get(studentKey);
+    student.scoreTotal += row.score;
+    student.count += 1;
+  }
+
+  const students = Array.from(studentMap.values())
+    .map((student) => {
+      const avgScore = student.count > 0 ? student.scoreTotal / student.count : 0;
+      return {
+        studentId: student._id,
+        firstName: student.firstName,
+        lastName: student.lastName,
+        name: student.name,
+        avgScore,
+        status: avgScore < thresholdStudent ? "At Risk" : "Good",
+      };
+    })
+    .sort((first, second) => {
+      if (first.avgScore !== second.avgScore) return first.avgScore - second.avgScore;
+      if (first.lastName !== second.lastName) return first.lastName.localeCompare(second.lastName);
+      return first.firstName.localeCompare(second.firstName);
+    });
+
+  return {
+    summary: {
+      courseId: courseIds.map((id) => String(id)).join(","),
+      courseName: courses.length > 1 ? `${courses.length} Courses` : courses[0].name,
+      startedAt: "",
+      endedAt: "",
+      selectedTypesString: typeList.join(","),
+      thresholds: {
+        studentAtRisk: thresholdStudent,
+      },
+      selectedAssessmentIds: assessmentIdList.map((id) => String(id)),
+      totalStudents: students.length,
+      atRiskStudentsCount: students.filter((student) => student.status === "At Risk").length,
+      avgScore:
+        students.length > 0
+          ? students.reduce((sum, student) => sum + student.avgScore, 0) / students.length
+          : 0,
+    },
+    students,
+  };
+};
 
 export const generateCourseReportSnapshot = async (config = {}) => {
   const {
@@ -104,7 +344,7 @@ export const generateCourseReportSnapshot = async (config = {}) => {
     courseIds,
   } = buildCommonConfig(config);
 
-  if (!courseIds || courseIds.length === 0) {
+  if (courseIds.length === 0) {
     throw new ApiError(400, "At least one courseId is required");
   }
 
@@ -120,245 +360,62 @@ export const generateCourseReportSnapshot = async (config = {}) => {
   }
 
   const courses = await Course.find({ _id: { $in: courseIds } }).lean();
-  if (!courses || courses.length === 0) throw new ApiError(404, "No courses found");
-
-  const summaryMatch = { "course._id": { $in: courseIds } };
-  const assessmentMatch = { "assessment.courseId": { $in: courseIds } };
-
-  if (typeList.length > 0) {
-    summaryMatch["assessment.type"] = { $in: typeList };
-    assessmentMatch["assessment.type"] = { $in: typeList };
-  }
-  if (assessmentIdList.length > 0) {
-    summaryMatch["assessment._id"] = { $in: assessmentIdList };
-    assessmentMatch["assessment._id"] = { $in: assessmentIdList };
+  if (courses.length === 0) {
+    throw new ApiError(404, "No courses found");
   }
 
-  withDateMatch(summaryMatch, start, end, "assessment.date");
-  withDateMatch(assessmentMatch, start, end, "assessment.date");
+  const assessmentMatch = buildAssessmentMatch({
+    courseIds,
+    typeList,
+    assessmentIdList,
+    start,
+    end,
+    includeDate: true,
+  });
 
-  const [assessments, studentRows] = await Promise.all([
-    // Aggregation 1: Per-assessment averages and risk status
-    Result.aggregate([
-      {
-        $lookup: {
-          from: "assessments",
-          localField: "assessmentId",
-          foreignField: "_id",
-          as: "assessment",
-        },
-      },
-      { $unwind: "$assessment" },
-      { $match: assessmentMatch },
-      {
-        $group: {
-          _id: "$assessment._id",
-          name: { $first: "$assessment.name" },
-          type: { $first: "$assessment.type" },
-          date: { $first: "$assessment.date" },
-          isPublished: { $first: "$assessment.isPublished" },
-          avgScore: { $avg: "$score" },
-          totalStudents: { $sum: 1 },
-          atRiskStudents: {
-            $sum: { $cond: [{ $lt: ["$score", thresholdStudent] }, 1, 0] },
-          },
-        },
-      },
-      {
-        $addFields: {
-          status: {
-            $cond: [{ $lt: ["$avgScore", thresholdCourse] }, "At Risk", "Good"],
-          },
-        },
-      },
-      {
-        $project: {
-          _id: 1,
-          name: 1,
-          type: 1,
-          date: 1,
-          isPublished: 1,
-          avgScore: 1,
-          status: 1,
-          totalStudents: 1,
-          atRiskStudents: 1,
-          atRiskStudentPct: {
-            $cond: [
-              { $eq: ["$totalStudents", 0] },
-              0,
-              {
-                $multiply: [
-                  { $divide: ["$atRiskStudents", "$totalStudents"] },
-                  100,
-                ],
-              },
-            ],
-          },
-        },
-      },
-      { $sort: { date: -1 } },
-    ]),
+  const rows = await fetchResultRows(assessmentMatch);
 
-    // Aggregation 2: Flat list of student scores per assessment
-    Result.aggregate([
-      {
-        $lookup: {
-          from: "assessments",
-          localField: "assessmentId",
-          foreignField: "_id",
-          as: "assessment",
-        },
-      },
-      { $unwind: "$assessment" },
-      { $match: assessmentMatch },
-      {
-        $lookup: {
-          from: "students",
-          localField: "studentId",
-          foreignField: "_id",
-          as: "student",
-        },
-      },
-      { $unwind: "$student" },
-      {
-        $project: {
-          _id: 0,
-          assessmentId: "$assessment._id",
-          studentId: "$student._id",
-          firstName: "$student.firstName",
-          lastName: "$student.lastName",
-          name: { $concat: ["$student.firstName", " ", "$student.lastName"] },
-          score: 1,
-          status: {
-            $cond: [{ $lt: ["$score", thresholdStudent] }, "At Risk", "Good"],
-          },
-        },
-      },
-      { $sort: { score: 1, lastName: 1, firstName: 1 } },
-    ]),
-  ]);
-
-  const combinedCourseName =
-    courses.length > 1
-      ? `${courses.length} Courses (${courses.map((c) => c.name).join(", ")})`
-      : courses[0].name;
-
-  return {
-    summary: {
-      courseId: courseIds.map((id) => String(id)).join(","),
-      courseName: combinedCourseName,
-      startedAt: startDate || "",
-      endedAt: endDate || "",
-      selectedTypesString: typeList.join(","),
-      thresholds: {
-        courseAtRisk: thresholdCourse,
-        studentAtRisk: thresholdStudent,
-      },
-      selectedAssessmentIds: assessmentIdList.map((id) => String(id)),
-      assessments,
-    },
-    students: studentRows.map((s) => ({
-      assessmentId: s.assessmentId,
-      studentId: s.studentId,
-      firstName: s.firstName,
-      lastName: s.lastName,
-      name: s.name,
-      score: s.score,
-      status: s.status,
-    })),
-  };
+  return buildCourseSnapshotFromRows({
+    rows,
+    courses,
+    courseIds,
+    startDate,
+    endDate,
+    typeList,
+    thresholdCourse,
+    thresholdStudent,
+    assessmentIdList,
+  });
 };
-
-// ─── Student Report ───────────────────────────────────────────────────────────
 
 export const generateStudentReportSnapshot = async (config = {}) => {
   const { thresholdStudent, typeList, assessmentIdList, courseIds } =
     buildCommonConfig(config);
 
-  if (!courseIds || courseIds.length === 0) {
+  if (courseIds.length === 0) {
     throw new ApiError(400, "At least one courseId is required");
   }
 
   const courses = await Course.find({ _id: { $in: courseIds } }).lean();
-  if (!courses || courses.length === 0) throw new ApiError(404, "No courses found");
+  if (courses.length === 0) {
+    throw new ApiError(404, "No courses found");
+  }
 
-  const assessmentMatch = { "assessment.courseId": { $in: courseIds } };
-  // Removed date match for student performance report 
-  if (typeList.length > 0)
-    assessmentMatch["assessment.type"] = { $in: typeList };
-  if (assessmentIdList.length > 0)
-    assessmentMatch["assessment._id"] = { $in: assessmentIdList };
+  const assessmentMatch = buildAssessmentMatch({
+    courseIds,
+    typeList,
+    assessmentIdList,
+    includeDate: false,
+  });
 
-  const studentRows = await Result.aggregate([
-    {
-      $lookup: {
-        from: "assessments",
-        localField: "assessmentId",
-        foreignField: "_id",
-        as: "assessment",
-      },
-    },
-    { $unwind: "$assessment" },
-    { $match: assessmentMatch },
-    {
-      // Average each student's scores across all matching assessments
-      $group: {
-        _id: "$studentId",
-        avgScore: { $avg: "$score" },
-      },
-    },
-    {
-      $lookup: {
-        from: "students",
-        localField: "_id",
-        foreignField: "_id",
-        as: "student",
-      },
-    },
-    { $unwind: "$student" },
-    {
-      $project: {
-        _id: 1,
-        firstName: "$student.firstName",
-        lastName: "$student.lastName",
-        name: { $concat: ["$student.firstName", " ", "$student.lastName"] },
-        avgScore: 1,
-        status: {
-          $cond: [{ $lt: ["$avgScore", thresholdStudent] }, "At Risk", "Good"],
-        },
-      },
-    },
-    { $sort: { avgScore: 1, lastName: 1, firstName: 1 } },
-  ]);
+  const rows = await fetchResultRows(assessmentMatch);
 
-  return {
-    summary: {
-      courseId: courseIds.map((id) => String(id)).join(","),
-      courseName: courses.length > 1 ? `${courses.length} Courses` : courses[0].name,
-      startedAt: "", // Redundant for student report
-      endedAt: "", // Redundant for student report
-      selectedTypesString: typeList.join(","),
-      thresholds: {
-        studentAtRisk: thresholdStudent,
-      },
-      selectedAssessmentIds: assessmentIdList.map((id) => String(id)),
-      totalStudents: studentRows.length,
-      atRiskStudentsCount: studentRows.filter((s) => s.status === "At Risk")
-        .length,
-      avgScore:
-        studentRows.length > 0
-          ? studentRows.reduce((sum, s) => sum + (s.avgScore || 0), 0) /
-            studentRows.length
-          : 0,
-    },
-    students: studentRows.map((s) => ({
-      studentId: s._id,
-      firstName: s.firstName,
-      lastName: s.lastName,
-      name: s.name,
-      avgScore: s.avgScore,
-      status: s.status,
-    })),
-  };
+  return buildStudentSnapshotFromRows({
+    rows,
+    courses,
+    courseIds,
+    typeList,
+    thresholdStudent,
+    assessmentIdList,
+  });
 };
-

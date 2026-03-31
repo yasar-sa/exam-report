@@ -934,8 +934,8 @@ export default function CategoryPerformanceReport({ initialConfig }) {
                       <thead>
                         <tr style={{ borderBottom: "1px solid #eee", textAlign: "left", color: "#666" }}>
                           <th style={{ padding: "4px 0" }}>DATE</th>
-                          <th>STUDENTS</th>
-                          {/* <th>AT-RISK</th> */}
+                          <th>ASSESSMENTS</th>
+                          <th>AT-RISK</th>
                           <th style={{ textAlign: "right" }}>AVG</th>
                         </tr>
                       </thead>
@@ -945,8 +945,10 @@ export default function CategoryPerformanceReport({ initialConfig }) {
                             <td style={{ padding: "6px 0", color: "#333" }}>
                               {new Date(entry.rerunAt).toLocaleString([], { dateStyle: "short", timeStyle: "short" })}
                             </td>
-                            <td style={{ color: "#333" }}>{entry.totalStudents}</td>
-                            {/* <td style={{ color: entry.atRiskCount > 0 ? "#d32f2f" : "#333" }}>{entry.atRiskCount}</td> */}
+                            <td style={{ color: "#333" }}>{entry.totalAssessments ?? entry.totalStudents ?? 0}</td>
+                            <td style={{ color: (entry.atRiskAssessments || entry.atRiskCount) > 0 ? "#d32f2f" : "#333" }}>
+                              {entry.atRiskAssessments ?? entry.atRiskCount ?? 0}
+                            </td>
                             <td style={{ textAlign: "right", color: "#333" }}>{Number(entry.avgScore || 0).toFixed(1)}%</td>
                           </tr>
                         ))}

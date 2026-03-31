@@ -1,259 +1,3 @@
-
-
-
-// import Course from "../models/Course.js";
-// import Result from "../models/Result.js";
-// import Assessment from "../models/Assessment.js";
-// import Student from "../models/Student.js";
-// import { ApiError } from "../middleware/errorHandler.js";
-// import { toObjectId, buildCommonConfig } from "./reportHelpers.js"; // reuse existing utils
-
-// const parseDate = (value) => {
-//   if (!value) return null;
-//   const d = new Date(value);
-//   return isNaN(d.getTime()) ? null : d;
-// };
-
-// // ─── Simple Course Report ─────────────────────────────────────────────────────
-
-// export const generateCourseReportSimple = async (config = {}) => {
-//   const { courseId } = config;
-//   if (!courseId) throw new ApiError(400, "courseId is required");
-
-//   const courseObjId = toObjectId(courseId, "courseId");
-//   const { startDate, endDate, thresholdCourse, thresholdStudent, typeList, assessmentIdList } =
-//     buildCommonConfig(config);
-
-//   const start = parseDate(startDate);
-//   const end = parseDate(endDate);
-
-//   // 1. Fetch the course
-//   const course = await Course.findById(courseObjId).lean();
-//   if (!course) throw new ApiError(404, "Course not found");
-
-//   // 2. Fetch matching assessments for this course
-//   const assessmentQuery = { courseId: courseObjId };
-//   if (typeList.length > 0) assessmentQuery.type = { $in: typeList };
-//   if (assessmentIdList.length > 0) assessmentQuery._id = { $in: assessmentIdList };
-//   if (start || end) {
-//     assessmentQuery.date = {};
-//     if (start) assessmentQuery.date.$gte = start;
-//     if (end) assessmentQuery.date.$lte = end;
-//   }
-
-//   const assessments = await Assessment.find(assessmentQuery).lean();
-//   const assessmentIds = assessments.map((a) => a._id);
-
-//   if (assessmentIds.length === 0) {
-//     return buildEmptyCourseReport(course, config, thresholdCourse, thresholdStudent, typeList, assessmentIdList);
-//   }
-
-//   // 3. Fetch all results for those assessments
-//   const results = await Result.find({ assessmentId: { $in: assessmentIds } }).lean();
-
-//   // 4. Fetch all involved students
-//   const studentIds = [...new Set(results.map((r) => String(r.studentId)))];
-//   const students = await Student.find({ _id: { $in: studentIds } }).lean();
-//   const studentMap = Object.fromEntries(students.map((s) => [String(s._id), s]));
-
-//   // 5. Build assessment summary in JS
-//   const assessmentMap = Object.fromEntries(assessments.map((a) => [String(a._id), a]));
-
-//   const assessmentSummaries = assessments.map((assessment) => {
-//     const aId = String(assessment._id);
-//     const aResults = results.filter((r) => String(r.assessmentId) === aId);
-
-//     const totalStudents = aResults.length;
-//     const avgScore = totalStudents > 0
-//       ? aResults.reduce((sum, r) => sum + r.score, 0) / totalStudents
-//       : 0;
-//     const atRiskStudents = aResults.filter((r) => r.score < thresholdStudent).length;
-
-//     return {
-//       _id: assessment._id,
-//       name: assessment.name,
-//       type: assessment.type,
-//       date: assessment.date,
-//       avgScore,
-//       status: avgScore < thresholdCourse ? "At Risk" : "Good",
-//       totalStudents,
-//       atRiskStudents,
-//       atRiskStudentPct: totalStudents > 0 ? (atRiskStudents / totalStudents) * 100 : 0,
-//     };
-//   }).sort((a, b) => new Date(b.date) - new Date(a.date));
-
-//   // 6. Build flat student rows per assessment
-//   const studentRows = results.map((r) => {
-//     const student = studentMap[String(r.studentId)] || {};
-//     return {
-//       assessmentId: r.assessmentId,
-//       studentId: r.studentId,
-//       firstName: student.firstName || "",
-//       lastName: student.lastName || "",
-//       name: `${student.firstName || ""} ${student.lastName || ""}`.trim(),
-//       score: r.score,
-//       status: r.score < thresholdStudent ? "At Risk" : "Good",
-//     };
-//   }).sort((a, b) => a.score - b.score || a.lastName.localeCompare(b.lastName));
-
-//   // 7. Compute course-level summary in JS
-//   const studentAvgMap = {};
-//   for (const r of results) {
-//     const sid = String(r.studentId);
-//     if (!studentAvgMap[sid]) studentAvgMap[sid] = { total: 0, count: 0 };
-//     studentAvgMap[sid].total += r.score;
-//     studentAvgMap[sid].count += 1;
-//   }
-
-//   const studentAvgs = Object.values(studentAvgMap).map((s) => s.total / s.count);
-//   const totalStudents = studentAvgs.length;
-//   const avgScore = totalStudents > 0
-//     ? studentAvgs.reduce((a, b) => a + b, 0) / totalStudents
-//     : 0;
-//   const atRiskStudents = studentAvgs.filter((avg) => avg < thresholdStudent).length;
-
-//   return {
-//     summary: {
-//       courseId: String(course._id),
-//       courseName: course.name,
-//       startedAt: startDate || "",
-//       endedAt: endDate || "",
-//       selectedTypesString: typeList.join(","),
-//       thresholds: { courseAtRisk: thresholdCourse, studentAtRisk: thresholdStudent },
-//       selectedAssessmentIds: assessmentIdList.map(String),
-//       totalStudents,
-//       atRiskStudents,
-//       avgScore,
-//       isAtRiskCourse: avgScore < thresholdCourse,
-//       assessments: assessmentSummaries,
-//     },
-//     students: studentRows,
-//   };
-// };
-
-// // ─── Simple Student Report ────────────────────────────────────────────────────
-
-// export const generateStudentReportSimple = async (config = {}) => {
-//   const { courseId } = config;
-//   if (!courseId) throw new ApiError(400, "courseId is required");
-
-//   const courseObjId = toObjectId(courseId, "courseId");
-//   const { startDate, endDate, thresholdStudent, typeList, assessmentIdList } =
-//     buildCommonConfig(config);
-
-//   const start = parseDate(startDate);
-//   const end = parseDate(endDate);
-
-//   const course = await Course.findById(courseObjId).lean();
-//   if (!course) throw new ApiError(404, "Course not found");
-
-//   // 1. Fetch matching assessments
-//   const assessmentQuery = { courseId: courseObjId };
-//   if (typeList.length > 0) assessmentQuery.type = { $in: typeList };
-//   if (assessmentIdList.length > 0) assessmentQuery._id = { $in: assessmentIdList };
-//   if (start || end) {
-//     assessmentQuery.date = {};
-//     if (start) assessmentQuery.date.$gte = start;
-//     if (end) assessmentQuery.date.$lte = end;
-//   }
-
-//   const assessments = await Assessment.find(assessmentQuery).lean();
-//   const assessmentIds = assessments.map((a) => a._id);
-
-//   if (assessmentIds.length === 0) {
-//     return buildEmptyStudentReport(course, config, thresholdStudent, typeList, assessmentIdList);
-//   }
-
-//   // 2. Fetch results + students
-//   const results = await Result.find({ assessmentId: { $in: assessmentIds } }).lean();
-//   const studentIds = [...new Set(results.map((r) => String(r.studentId)))];
-//   const students = await Student.find({ _id: { $in: studentIds } }).lean();
-//   const studentMap = Object.fromEntries(students.map((s) => [String(s._id), s]));
-
-//   // 3. Group results by student and compute average
-//   const grouped = {};
-//   for (const r of results) {
-//     const sid = String(r.studentId);
-//     if (!grouped[sid]) grouped[sid] = { total: 0, count: 0 };
-//     grouped[sid].total += r.score;
-//     grouped[sid].count += 1;
-//   }
-
-//   const studentRows = Object.entries(grouped).map(([sid, { total, count }]) => {
-//     const student = studentMap[sid] || {};
-//     const avgScore = total / count;
-//     return {
-//       studentId: sid,
-//       firstName: student.firstName || "",
-//       lastName: student.lastName || "",
-//       name: `${student.firstName || ""} ${student.lastName || ""}`.trim(),
-//       avgScore,
-//       status: avgScore < thresholdStudent ? "At Risk" : "Good",
-//     };
-//   }).sort((a, b) => a.avgScore - b.avgScore || a.lastName.localeCompare(b.lastName));
-
-//   const totalStudents = studentRows.length;
-//   const atRiskStudentsCount = studentRows.filter((s) => s.status === "At Risk").length;
-//   const avgScore = totalStudents > 0
-//     ? studentRows.reduce((sum, s) => sum + s.avgScore, 0) / totalStudents
-//     : 0;
-
-//   return {
-//     summary: {
-//       courseId: String(course._id),
-//       courseName: course.name,
-//       startedAt: startDate || "",
-//       endedAt: endDate || "",
-//       selectedTypesString: typeList.join(","),
-//       thresholds: { studentAtRisk: thresholdStudent },
-//       selectedAssessmentIds: assessmentIdList.map(String),
-//       totalStudents,
-//       atRiskStudentsCount,
-//       avgScore,
-//     },
-//     students: studentRows,
-//   };
-// };
-
-// // ─── Empty fallbacks ──────────────────────────────────────────────────────────
-
-// const buildEmptyCourseReport = (course, config, thresholdCourse, thresholdStudent, typeList, assessmentIdList) => ({
-//   summary: {
-//     courseId: String(course._id),
-//     courseName: course.name,
-//     startedAt: config.startDate || "",
-//     endedAt: config.endDate || "",
-//     selectedTypesString: typeList.join(","),
-//     thresholds: { courseAtRisk: thresholdCourse, studentAtRisk: thresholdStudent },
-//     selectedAssessmentIds: assessmentIdList.map(String),
-//     totalStudents: 0,
-//     atRiskStudents: 0,
-//     avgScore: 0,
-//     isAtRiskCourse: false,
-//     assessments: [],
-//   },
-//   students: [],
-// });
-
-// const buildEmptyStudentReport = (course, config, thresholdStudent, typeList, assessmentIdList) => ({
-//   summary: {
-//     courseId: String(course._id),
-//     courseName: course.name,
-//     startedAt: config.startDate || "",
-//     endedAt: config.endDate || "",
-//     selectedTypesString: typeList.join(","),
-//     thresholds: { studentAtRisk: thresholdStudent },
-//     selectedAssessmentIds: assessmentIdList.map(String),
-//     totalStudents: 0,
-//     atRiskStudentsCount: 0,
-//     avgScore: 0,
-//   },
-//   students: [],
-// });
-
-
-
-
 import mongoose from "mongoose";
 import Course from "../models/Course.js";
 import Result from "../models/Result.js";
@@ -318,6 +62,10 @@ const buildCommonConfig = (config = {}) => {
     config.assessmentIds || config.selectedAssessmentIds,
   ).map((id) => toObjectId(id, "assessmentId"));
 
+  const courseIds = parseCommaList(config.courseId || config.courseIds).map((id) =>
+    toObjectId(id, "courseId"),
+  );
+
   return {
     startDate: config.startDate || "",
     endDate: config.endDate || "",
@@ -331,6 +79,7 @@ const buildCommonConfig = (config = {}) => {
     ),
     typeList: buildTypeList(config),
     assessmentIdList,
+    courseIds,
   };
 };
 
@@ -345,10 +94,6 @@ const withDateMatch = (target, start, end, fieldName) => {
 // ─── Course Report ────────────────────────────────────────────────────────────
 
 export const generateCourseReportSnapshot = async (config = {}) => {
-  const { courseId } = config;
-  if (!courseId) throw new ApiError(400, "courseId is required");
-
-  const courseObjId = toObjectId(courseId, "courseId");
   const {
     startDate,
     endDate,
@@ -356,16 +101,29 @@ export const generateCourseReportSnapshot = async (config = {}) => {
     thresholdStudent,
     typeList,
     assessmentIdList,
+    courseIds,
   } = buildCommonConfig(config);
+
+  if (!courseIds || courseIds.length === 0) {
+    throw new ApiError(400, "At least one courseId is required");
+  }
+
+  if (!startDate || !endDate) {
+    throw new ApiError(400, "Both 'startDate' and 'endDate' are required for Course Reports");
+  }
 
   const start = parseDate(startDate);
   const end = parseDate(endDate);
 
-  const course = await Course.findById(courseObjId).lean();
-  if (!course) throw new ApiError(404, "Course not found");
+  if (start && end && start > end) {
+    throw new ApiError(400, "'startDate' cannot be after 'endDate'");
+  }
 
-  const summaryMatch = { "course._id": courseObjId };
-  const assessmentMatch = { "assessment.courseId": courseObjId };
+  const courses = await Course.find({ _id: { $in: courseIds } }).lean();
+  if (!courses || courses.length === 0) throw new ApiError(404, "No courses found");
+
+  const summaryMatch = { "course._id": { $in: courseIds } };
+  const assessmentMatch = { "assessment.courseId": { $in: courseIds } };
 
   if (typeList.length > 0) {
     summaryMatch["assessment.type"] = { $in: typeList };
@@ -375,73 +133,12 @@ export const generateCourseReportSnapshot = async (config = {}) => {
     summaryMatch["assessment._id"] = { $in: assessmentIdList };
     assessmentMatch["assessment._id"] = { $in: assessmentIdList };
   }
-2
+
   withDateMatch(summaryMatch, start, end, "assessment.date");
   withDateMatch(assessmentMatch, start, end, "assessment.date");
 
-  const [courseStudents, assessments, studentRows] = await Promise.all([
-    // Aggregation 1: Per-course student averages → course-level risk summary
-    Result.aggregate([
-      {
-        $lookup: {
-          from: "assessments",
-          localField: "assessmentId",
-          foreignField: "_id",
-          as: "assessment",
-        },
-      },
-      { $unwind: "$assessment" },
-      {
-        $lookup: {
-          from: "courses",
-          localField: "assessment.courseId",
-          foreignField: "_id",
-          as: "course",
-        },
-      },
-      { $unwind: "$course" },
-      { $match: summaryMatch },
-      {
-        // Step 1: Average each student's score within the course
-        $group: {
-          _id: { courseId: "$course._id", studentId: "$studentId" },
-          courseName: { $first: "$course.name" },
-          studentAvgScore: { $avg: "$score" },
-        },
-      },
-      {
-        $addFields: {
-          isAtRiskStudent: { $lt: ["$studentAvgScore", thresholdStudent] },
-        },
-      },
-      {
-        // Step 2: Roll up to course level
-        $group: {
-          _id: "$_id.courseId",
-          courseName: { $first: "$courseName" },
-          avgScore: { $avg: "$studentAvgScore" },
-          totalStudents: { $sum: 1 },
-        },
-      },
-      {
-        $addFields: {
-          isAtRiskCourse: { $lt: ["$avgScore", thresholdCourse] },
-        },
-      },
-      {
-        $project: {
-          _id: 0,
-          courseId: "$_id",
-          courseName: 1,
-          avgScore: 1,
-          totalStudents: 1,
-          atRiskStudents: 1,
-          isAtRiskCourse: 1,
-        },
-      },
-    ]),
-
-    // Aggregation 2: Per-assessment averages and risk status
+  const [assessments, studentRows] = await Promise.all([
+    // Aggregation 1: Per-assessment averages and risk status
     Result.aggregate([
       {
         $lookup: {
@@ -459,6 +156,7 @@ export const generateCourseReportSnapshot = async (config = {}) => {
           name: { $first: "$assessment.name" },
           type: { $first: "$assessment.type" },
           date: { $first: "$assessment.date" },
+          isPublished: { $first: "$assessment.isPublished" },
           avgScore: { $avg: "$score" },
           totalStudents: { $sum: 1 },
           atRiskStudents: {
@@ -479,6 +177,7 @@ export const generateCourseReportSnapshot = async (config = {}) => {
           name: 1,
           type: 1,
           date: 1,
+          isPublished: 1,
           avgScore: 1,
           status: 1,
           totalStudents: 1,
@@ -500,7 +199,7 @@ export const generateCourseReportSnapshot = async (config = {}) => {
       { $sort: { date: -1 } },
     ]),
 
-    // Aggregation 3: Flat list of student scores per assessment
+    // Aggregation 2: Flat list of student scores per assessment
     Result.aggregate([
       {
         $lookup: {
@@ -539,19 +238,15 @@ export const generateCourseReportSnapshot = async (config = {}) => {
     ]),
   ]);
 
-  const courseSummary = courseStudents[0] || {
-    courseId: course._id,
-    courseName: course.name,
-    avgScore: 0,
-    totalStudents: 0,
-    atRiskStudents: 0,
-    isAtRiskCourse: false,
-  };
+  const combinedCourseName =
+    courses.length > 1
+      ? `${courses.length} Courses (${courses.map((c) => c.name).join(", ")})`
+      : courses[0].name;
 
   return {
     summary: {
-      courseId: String(course._id),
-      courseName: course.name,
+      courseId: courseIds.map((id) => String(id)).join(","),
+      courseName: combinedCourseName,
       startedAt: startDate || "",
       endedAt: endDate || "",
       selectedTypesString: typeList.join(","),
@@ -560,18 +255,6 @@ export const generateCourseReportSnapshot = async (config = {}) => {
         studentAtRisk: thresholdStudent,
       },
       selectedAssessmentIds: assessmentIdList.map((id) => String(id)),
-      totalCourses: courseStudents.length > 0 ? courseStudents.length : 1,
-      atRiskCourseCount:
-        courseStudents.length > 0
-          ? courseStudents.filter((c) => c.isAtRiskCourse).length
-          : courseSummary.isAtRiskCourse
-            ? 1
-            : 0,
-      courses: [courseSummary],
-      avgScore: courseSummary.avgScore,
-      totalStudents: courseSummary.totalStudents,
-      atRiskStudents: courseSummary.atRiskStudents,
-      isAtRiskCourse: courseSummary.isAtRiskCourse,
       assessments,
     },
     students: studentRows.map((s) => ({
@@ -589,25 +272,22 @@ export const generateCourseReportSnapshot = async (config = {}) => {
 // ─── Student Report ───────────────────────────────────────────────────────────
 
 export const generateStudentReportSnapshot = async (config = {}) => {
-  const { courseId } = config;
-  if (!courseId) throw new ApiError(400, "courseId is required");
-
-  const courseObjId = toObjectId(courseId, "courseId");
-  const { startDate, endDate, thresholdStudent, typeList, assessmentIdList } =
+  const { thresholdStudent, typeList, assessmentIdList, courseIds } =
     buildCommonConfig(config);
 
-  const start = parseDate(startDate);
-  const end = parseDate(endDate);
+  if (!courseIds || courseIds.length === 0) {
+    throw new ApiError(400, "At least one courseId is required");
+  }
 
-  const course = await Course.findById(courseObjId).lean();
-  if (!course) throw new ApiError(404, "Course not found");
+  const courses = await Course.find({ _id: { $in: courseIds } }).lean();
+  if (!courses || courses.length === 0) throw new ApiError(404, "No courses found");
 
-  const assessmentMatch = { "assessment.courseId": courseObjId };
+  const assessmentMatch = { "assessment.courseId": { $in: courseIds } };
+  // Removed date match for student performance report 
   if (typeList.length > 0)
     assessmentMatch["assessment.type"] = { $in: typeList };
   if (assessmentIdList.length > 0)
     assessmentMatch["assessment._id"] = { $in: assessmentIdList };
-  withDateMatch(assessmentMatch, start, end, "assessment.date");
 
   const studentRows = await Result.aggregate([
     {
@@ -653,10 +333,10 @@ export const generateStudentReportSnapshot = async (config = {}) => {
 
   return {
     summary: {
-      courseId: String(course._id),
-      courseName: course.name,
-      startedAt: startDate || "",
-      endedAt: endDate || "",
+      courseId: courseIds.map((id) => String(id)).join(","),
+      courseName: courses.length > 1 ? `${courses.length} Courses` : courses[0].name,
+      startedAt: "", // Redundant for student report
+      endedAt: "", // Redundant for student report
       selectedTypesString: typeList.join(","),
       thresholds: {
         studentAtRisk: thresholdStudent,
@@ -681,4 +361,3 @@ export const generateStudentReportSnapshot = async (config = {}) => {
     })),
   };
 };
-

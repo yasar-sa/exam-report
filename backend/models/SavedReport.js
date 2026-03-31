@@ -38,6 +38,8 @@ const SavedReportSchema = new mongoose.Schema(
         totalStudents: Number,
         atRiskCount: Number,
         avgScore: Number,
+        totalAssessments: Number,
+        atRiskAssessments: Number,
       },
     ],
   },
