@@ -234,7 +234,7 @@ export default function StudentCategoryPerformanceReport({ initialConfig }) {
   };
 
   const renderReportBody = () => (
-    <div className="report-body-container pt-2">
+    <div className="report-body-container pt-2 fade-in">
       <div className="mb-4">
         <div style={{ fontSize: 18, fontWeight: 400, color: "#333", marginBottom: 12 }}>
           Student Performance Report
@@ -264,7 +264,7 @@ export default function StudentCategoryPerformanceReport({ initialConfig }) {
       </div>
 
       <div
-        className="report-card"
+        className="report-card slide-up"
         style={{
           background: "white",
           padding: "20px",
@@ -534,7 +534,7 @@ export default function StudentCategoryPerformanceReport({ initialConfig }) {
 
               {showHistory && rerunHistory.length > 0 && (
                 <div
-                  className="mt-2 text-start p-2"
+                  className="mt-2 text-start p-2 slide-down"
                   style={{
                     background: "#f9f9f9",
                     border: "1px solid #ddd",

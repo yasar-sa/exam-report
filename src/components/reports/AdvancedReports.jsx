@@ -166,7 +166,7 @@ export default function AdvancedReportsPage() {
         </div>
 
         <div className="table-responsive" style={{ borderRadius: "4px" }}>
-          <div className="report-table">
+          <div className="report-table slide-down">
             <table className="table mb-0 report-table" style={{ minWidth: "780px" }}>
               <thead>
                 <tr>

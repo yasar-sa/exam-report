@@ -352,7 +352,7 @@ export default function CategoryPerformanceReport({ initialConfig }) {
   const totalAssessmentsCount = report?.assessments?.length || 0;
 
   const renderReportBody = () => (
-    <div className="report-body-container pt-2">
+    <div className="report-body-container pt-2 fade-in">
       <div className="mb-4">
         <div style={{ fontSize: 18, fontWeight: 400, color: "#333", marginBottom: 12 }}>
           Course Performance Report
@@ -390,7 +390,7 @@ export default function CategoryPerformanceReport({ initialConfig }) {
       </div>
 
       <div
-        className="report-card"
+        className="report-card slide-up"
         style={{
           background: "white",
           padding: "20px",
@@ -602,8 +602,8 @@ export default function CategoryPerformanceReport({ initialConfig }) {
                       </tr>
 
                       {expandedAssessmentIds[assessment._id] ? (
-                        <tr>
-                          <td colSpan={6} style={{ padding: 0 }}>
+                        <tr className="slide-down">
+                          <td colSpan={7} style={{ padding: 0 }}>
                             <div style={{ padding: "0 0 0 40px", background: "#f5f5f5" }}>
                               <div
                                 style={{
@@ -917,7 +917,7 @@ export default function CategoryPerformanceReport({ initialConfig }) {
 
               {showHistory && rerunHistory.length > 0 && (
                 <div
-                  className="mt-2 text-start p-2"
+                  className="mt-2 text-start p-2 slide-down"
                   style={{
                     background: "#f9f9f9",
                     border: "1px solid #ddd",

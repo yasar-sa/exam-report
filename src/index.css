@@ -1,0 +1,76 @@
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideDown {
+  from { 
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to { 
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideUp {
+  from { 
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to { 
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.4s ease-out;
+}
+
+.slide-down {
+  animation: slideDown 0.3s ease-out;
+}
+
+.slide-up {
+  animation: slideUp 0.3s ease-out;
+}
+
+/* Global Transitions */
+button, 
+.btn,
+a,
+.table tr {
+  transition: all 0.2s ease-in-out !important;
+}
+
+/* Specific Hover Effects */
+.btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.btn:active {
+  transform: translateY(0);
+}
+
+.table tr:hover {
+  background-color: #f8f9fa !important;
+}
+
+/* Smooth Accordion-like behavior for student list */
+.collapsible-content {
+  overflow: hidden;
+  transition: max-height 0.3s ease-in-out;
+}
+
+.report-card {
+  transition: box-shadow 0.3s ease;
+  border-radius: 8px !important;
+}
+
+.report-card:hover {
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08) !important;
+}
