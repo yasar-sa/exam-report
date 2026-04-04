@@ -4,7 +4,7 @@ export default function SliderWithInput({ label, value, onChange }) {
       <div className="slider-label">{label}</div>
       <div className="slider-ticks">
         {[0, 25, 50, 75, 100].map((t) => (
-          <span key={t}>{t}</span>
+          <span key={t}>{t}%</span>
         ))}
       </div>
       <input
@@ -15,7 +15,7 @@ export default function SliderWithInput({ label, value, onChange }) {
         onChange={(e) => onChange(Number(e.target.value))}
         className="custom-slider"
       />
-      <div className="mt-2">
+      <div className="d-flex align-items-center gap-2">
         <input
           type="number"
           min={0}
@@ -24,6 +24,7 @@ export default function SliderWithInput({ label, value, onChange }) {
           onChange={(e) => onChange(Number(e.target.value))}
           className="slider-number-input"
         />
+        <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-soft)' }}>%</span>
       </div>
     </div>
   );

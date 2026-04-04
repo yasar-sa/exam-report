@@ -35,13 +35,11 @@ export default function SavedReportPage() {
 
         if (!cancelled) {
           setReport(json.data);
+          setLoading(false);
         }
       } catch (e) {
         if (!cancelled) {
           setError(e?.message || "Failed to load report");
-        }
-      } finally {
-        if (!cancelled) {
           setLoading(false);
         }
       }
@@ -52,7 +50,7 @@ export default function SavedReportPage() {
     return () => {
       cancelled = true;
     };
-  }, [id, report]);
+  }, [id]);
 
   if (loading) {
     return (

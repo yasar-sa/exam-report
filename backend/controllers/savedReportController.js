@@ -94,6 +94,38 @@ export const getSavedReportById = async (req, res) => {
 };
 
 // @route   GET /api/saved-reports/:id/students
+// export const getSavedReportStudents = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+//     const page = parseInt(req.query.page) || 1;
+//     const limit = parseInt(req.query.limit) || 10;
+//     const assessmentId = req.query.assessmentId || null;
+//     const skip = (page - 1) * limit;
+
+//     const query = { savedReportId: id };
+//     if (assessmentId) query.assessmentId = assessmentId;
+
+//     const total = await SavedReportStudent.countDocuments(query);
+//     const students = await SavedReportStudent.find(query)
+//       .sort({ avgScore: -1, score: -1, lastName: 1 })
+//       .skip(skip)
+//       .limit(limit);
+
+//     res.json({
+//       success: true,
+//       data: students,
+//       pagination: {
+//         total,
+//         page,
+//         limit,
+//         pages: Math.ceil(total / limit),
+//       },
+//     });
+//   } catch (err) {
+//     res.status(500).json({ success: false, error: err.message });
+//   }
+// };
+
 export const getSavedReportStudents = async (req, res) => {
   try {
     const { id } = req.params;
@@ -106,10 +138,13 @@ export const getSavedReportStudents = async (req, res) => {
     if (assessmentId) query.assessmentId = assessmentId;
 
     const total = await SavedReportStudent.countDocuments(query);
+
     const students = await SavedReportStudent.find(query)
-      .sort({ avgScore: -1, score: -1, lastName: 1 })
+      .select("_id name score avgScore status") // ✅ reduced payload
+      .sort({ avgScore: -1, score: -1 })
       .skip(skip)
-      .limit(limit);
+      .limit(limit)
+      .lean(); // ✅ performance boost
 
     res.json({
       success: true,
@@ -125,6 +160,7 @@ export const getSavedReportStudents = async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 };
+
 
 // @route   POST /api/saved-reports
 export const createSavedReport = async (req, res) => {

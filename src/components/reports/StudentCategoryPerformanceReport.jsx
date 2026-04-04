@@ -1,5 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  AlertCircle,
+  Users,
+  Activity,
+  FileText,
+  BookOpen,
+  CheckCircle2,
+  ChevronRight,
+  Download,
+  ArrowLeft,
+  RefreshCw,
+  Trash2,
+  Edit3,
+  Clock,
+} from "lucide-react";
 import Layout from "../shared/Layout";
 import ReportFormShell from "../shared/ReportFormShell";
 import ReportFormLeft from "../shared/ReportFormLeft";
@@ -7,13 +23,9 @@ import ReportFormRight from "../shared/ReportFormRight";
 
 const API_BASE = "http://localhost:5000";
 
-const SLIDERS = [{ label: "Student At Risk Threshold", stateKey: "studentAtRisk" }];
-
-const defaultAssessmentTypes = {
-  Exam: true,
-  Quiz: true,
-  Assignment: true,
-};
+const SLIDERS = [
+  { label: "Student At Risk Threshold", stateKey: "studentAtRisk" },
+];
 
 export default function StudentCategoryPerformanceReport({ initialConfig }) {
   const navigate = useNavigate();
@@ -21,9 +33,8 @@ export default function StudentCategoryPerformanceReport({ initialConfig }) {
   const [reportName, setReportName] = useState(
     initialConfig?.config?.reportName || initialConfig?.name || "",
   );
-  const [courseId, setCourseId] = useState(initialConfig?.config?.courseId || "");
-  const [assessmentTypes, setAssessmentTypes] = useState(
-    initialConfig?.config?.assessmentTypes || defaultAssessmentTypes,
+  const [courseId, setCourseId] = useState(
+    initialConfig?.config?.courseId || "",
   );
   const [sliderValues, setSliderValues] = useState(
     initialConfig?.config?.sliderValues || { studentAtRisk: 70 },
@@ -34,50 +45,47 @@ export default function StudentCategoryPerformanceReport({ initialConfig }) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState("");
   const [isEditing, setIsEditing] = useState(!initialConfig);
-  const [lastRerunAt, setLastRerunAt] = useState(initialConfig?.lastRerunAt || null);
-  const [rerunHistory, setRerunHistory] = useState(initialConfig?.rerunHistory || []);
+  const [lastRerunAt, setLastRerunAt] = useState(
+    initialConfig?.lastRerunAt || null,
+  );
+  const [rerunHistory, setRerunHistory] = useState(
+    initialConfig?.rerunHistory || [],
+  );
   const [showHistory, setShowHistory] = useState(false);
 
   // Pagination State
   const [students, setStudents] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
-  const [pagination, setPagination] = useState({ total: 0, pages: 0, limit: 10 });
+  const [pagination, setPagination] = useState({
+    total: 0,
+    pages: 0,
+    limit: 10,
+  });
   const [isLoadingStudents, setIsLoadingStudents] = useState(false);
 
   const shouldLoadCourses = isEditing || !initialConfig;
 
   useEffect(() => {
     if (!shouldLoadCourses) return undefined;
-
     let cancelled = false;
-
     const loadCourses = async () => {
       try {
         const res = await fetch(`${API_BASE}/api/courses`);
         const json = await res.json();
-        if (!cancelled && json.success) {
-          setCourses(json.data || []);
-        }
+        if (!cancelled && json.success) setCourses(json.data || []);
       } catch {
-        if (!cancelled) {
-          setCourses([]);
-        }
+        if (!cancelled) setCourses([]);
       }
     };
-
     loadCourses();
-
     return () => {
       cancelled = true;
     };
   }, [shouldLoadCourses]);
 
-  // Fetch paginated students
   useEffect(() => {
     if (isEditing || !reportDbId) return;
-
     let cancelled = false;
-
     const fetchStudents = async () => {
       setIsLoadingStudents(true);
       try {
@@ -95,9 +103,7 @@ export default function StudentCategoryPerformanceReport({ initialConfig }) {
         if (!cancelled) setIsLoadingStudents(false);
       }
     };
-
     fetchStudents();
-
     return () => {
       cancelled = true;
     };
@@ -109,7 +115,7 @@ export default function StudentCategoryPerformanceReport({ initialConfig }) {
 
   const courseName = useMemo(() => {
     return (
-      courses.find((course) => course._id === courseId)?.name ||
+      courses.find((c) => c._id === courseId)?.name ||
       report?.courseName ||
       initialConfig?.courseName ||
       ""
@@ -125,12 +131,10 @@ export default function StudentCategoryPerformanceReport({ initialConfig }) {
     setReport(savedReport.reportData || null);
     setReportName(savedReport.config?.reportName || savedReport.name || "");
     setCourseId(savedReport.config?.courseId || "");
-    setAssessmentTypes(savedReport.config?.assessmentTypes || defaultAssessmentTypes);
     setSliderValues(savedReport.config?.sliderValues || { studentAtRisk: 70 });
     setLastRerunAt(savedReport.lastRerunAt || null);
     setRerunHistory(savedReport.rerunHistory || []);
     setIsEditing(false);
-    // Reset pagination on sync
     setCurrentPage(1);
   };
 
@@ -138,12 +142,7 @@ export default function StudentCategoryPerformanceReport({ initialConfig }) {
     name: reportName.trim() || "Student Performance",
     type: "Student Performance",
     courseName,
-    config: {
-      reportName,
-      courseId,
-      assessmentTypes,
-      sliderValues,
-    },
+    config: { reportName, courseId, sliderValues },
   });
 
   const generateReport = async () => {
@@ -151,31 +150,32 @@ export default function StudentCategoryPerformanceReport({ initialConfig }) {
       setError("Please select a course.");
       return;
     }
-
     setIsGenerating(true);
     setError("");
-
     try {
       const payload = buildPayload();
       const method = reportDbId ? "PUT" : "POST";
       const url = reportDbId
         ? `${API_BASE}/api/saved-reports/${reportDbId}`
         : `${API_BASE}/api/saved-reports`;
-
       const res = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
       const json = await res.json();
-
-      if (!res.ok || !json.success) {
+      if (!res.ok || !json.success)
         throw new Error(json?.error || "Failed to generate report");
-      }
 
-      syncFromSavedReport(json.data);
-      if (!reportDbId && json.data?.id) {
-        navigate(`/reports/${json.data.id}`, { replace: true, state: { report: json.data } });
+      if (reportDbId) {
+        // If updating an existing report, sync locally
+        syncFromSavedReport(json.data);
+      } else if (json.data?.id) {
+        // If new, just navigate; SavedReportPage will handle the first render
+        navigate(`/reports/${json.data.id}`, {
+          replace: true,
+          state: { report: json.data },
+        });
       }
     } catch (e) {
       setError(e?.message || "Failed to generate report");
@@ -189,20 +189,16 @@ export default function StudentCategoryPerformanceReport({ initialConfig }) {
       await generateReport();
       return;
     }
-
     setIsGenerating(true);
     setError("");
-
     try {
-      const res = await fetch(`${API_BASE}/api/saved-reports/${reportDbId}/rerun`, {
-        method: "POST",
-      });
+      const res = await fetch(
+        `${API_BASE}/api/saved-reports/${reportDbId}/rerun`,
+        { method: "POST" },
+      );
       const json = await res.json();
-
-      if (!res.ok || !json.success) {
+      if (!res.ok || !json.success)
         throw new Error(json?.error || "Failed to rerun report");
-      }
-
       syncFromSavedReport(json.data);
     } catch (e) {
       setError(e?.message || "Failed to rerun report");
@@ -216,12 +212,10 @@ export default function StudentCategoryPerformanceReport({ initialConfig }) {
       setIsConfirmingDelete(true);
       return;
     }
-
     if (!reportDbId) {
       goBack();
       return;
     }
-
     try {
       await fetch(`${API_BASE}/api/saved-reports/${reportDbId}`, {
         method: "DELETE",
@@ -233,350 +227,429 @@ export default function StudentCategoryPerformanceReport({ initialConfig }) {
     }
   };
 
-  const renderReportBody = () => (
-    <div className="report-body-container pt-2 fade-in">
-      <div className="mb-4">
-        <div style={{ fontSize: 18, fontWeight: 400, color: "#333", marginBottom: 12 }}>
-          Student Performance Report
-        </div>
+  const renderReportBody = () => {
+    const atRiskCount = report?.atRiskStudentsCount ?? 0;
+    const totalCount = report?.totalStudents ?? 0;
 
-        <div
-          style={{
-            display: "flex",
-            gap: "10px",
-            fontSize: "11px",
-            fontWeight: "600",
-            color: "#555",
-            textTransform: "uppercase",
-          }}
-        >
-          <span>
-            <strong style={{ color: "#d32f2f" }}>
-              At-Risk Students: {report?.atRiskStudentsCount ?? 0}
-            </strong>{" "}
-            | Total Students: {report?.totalStudents ?? 0}
-          </span>
-        </div>
-        <div style={{ fontSize: "11px", color: "#666", marginTop: "4px" }}>
-          Course: {report?.courseName || courseName || "Unknown"} | Student At Risk Threshold:{" "}
-          {report?.thresholds?.studentAtRisk ?? 0}%
-        </div>
-      </div>
-
-      <div
-        className="report-card slide-up"
-        style={{
-          background: "white",
-          padding: "20px",
-          border: "1px solid #ddd",
-          boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-        }}
-      >
-        <div
-          className="d-flex flex-column flex-sm-row justify-content-between align-items-sm-end mb-2 gap-2"
-          style={{ borderBottom: "1px solid #eee", paddingBottom: "10px", marginBottom: "15px" }}
-        >
-          <div style={{ fontSize: 13, fontWeight: 700, color: "#333", textTransform: "uppercase" }}>
-            Students
+    return (
+      <div className="report-body fade-in">
+        {/* Analytics Summary */}
+        <div className="row g-3 mb-4">
+          <div className="col-md-6 col-lg-4">
+            <div className="glass-card p-3 d-flex align-items-center gap-3">
+              <div
+                style={{
+                  background: "#fee2e2",
+                  padding: "10px",
+                  borderRadius: "6px",
+                  color: "#ef4444",
+                }}
+              >
+                <Users size={24} />
+              </div>
+              <div>
+                <div
+                  style={{
+                    fontSize: "11px",
+                    color: "var(--text-soft)",
+                    fontWeight: 700,
+                    letterSpacing: "0.02em",
+                  }}
+                >
+                  AT-RISK STUDENTS
+                </div>
+                <div
+                  style={{
+                    fontSize: "20px",
+                    fontWeight: 700,
+                    color: "var(--text-main)",
+                  }}
+                >
+                  {atRiskCount}
+                </div>
+              </div>
+            </div>
           </div>
-          <div className="d-flex flex-wrap gap-2 gap-sm-3 align-items-center" style={{ fontSize: 11, color: "#555" }}>
-            <span>
-              <svg width="10" height="10" style={{ fill: "#d32f2f", transform: "translateY(2px)" }}>
-                <path d="M0,0 L10,0 L5,8 Z" />
-              </svg>{" "}
-              At-Risk
+          <div className="col-md-6 col-lg-4">
+            <div className="glass-card p-3 d-flex align-items-center gap-3">
+              <div
+                style={{
+                  background: "#eef2ff",
+                  padding: "10px",
+                  borderRadius: "6px",
+                  color: "var(--primary)",
+                }}
+              >
+                <Users size={24} />
+              </div>
+              <div>
+                <div
+                  style={{
+                    fontSize: "11px",
+                    color: "var(--text-soft)",
+                    fontWeight: 700,
+                    letterSpacing: "0.02em",
+                  }}
+                >
+                  TOTAL STUDENTS
+                </div>
+                <div
+                  style={{
+                    fontSize: "20px",
+                    fontWeight: 700,
+                    color: "var(--text-main)",
+                  }}
+                >
+                  {totalCount}
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="col-lg-4 d-none d-lg-block">
+            <div className="glass-card p-3 d-flex align-items-center gap-3">
+              <div
+                style={{
+                  background: "#ecfdf5",
+                  padding: "10px",
+                  borderRadius: "6px",
+                  color: "var(--accent)",
+                }}
+              >
+                <Activity size={24} />
+              </div>
+              <div>
+                <div
+                  style={{
+                    fontSize: "11px",
+                    color: "var(--text-soft)",
+                    fontWeight: 700,
+                    letterSpacing: "0.02em",
+                  }}
+                >
+                  RISK THRESHOLD
+                </div>
+                <div
+                  style={{
+                    fontSize: "20px",
+                    fontWeight: 700,
+                    color: "var(--text-main)",
+                  }}
+                >
+                  {report?.thresholds?.studentAtRisk ?? 0}%
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Course Info Badge */}
+        <div className="d-flex mb-4 gap-2 flex-wrap">
+          <div
+            className="bg-white border px-3 py-1 rounded d-flex align-items-center gap-2"
+            style={{
+              fontSize: "11px",
+              color: "var(--text-soft)",
+              fontWeight: 600,
+            }}
+          >
+            <BookOpen size={13} />
+            COURSE:{" "}
+            <span className="text-main">
+              {report?.courseName || courseName}
             </span>
-            <span>
-              <svg width="10" height="10" style={{ fill: "#388e3c", transform: "translateY(1px)" }}>
-                <path d="M5,0 L10,8 L0,8 Z" />
-              </svg>{" "}
-              Doing Well
+          </div>
+          <div
+            className="bg-white border px-3 py-1 rounded d-flex align-items-center gap-2"
+            style={{
+              fontSize: "11px",
+              color: "var(--text-soft)",
+              fontWeight: 600,
+            }}
+          >
+            <Activity size={13} />
+            LIMIT:{" "}
+            <span className="text-main">
+              {report?.thresholds?.studentAtRisk ?? 0}%
             </span>
           </div>
         </div>
 
-        <div className="table-responsive" style={{ borderRadius: "3px", position: "relative" }}>
-          {isLoadingStudents && (
-            <div
-              style={{
-                position: "absolute",
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                background: "rgba(255,255,255,0.6)",
-                display: "flex",
-                justifyContent: "center",
-                alignItems: "center",
-                zIndex: 1,
-              }}
-            >
-              <div className="spinner-border spinner-border-sm text-primary" role="status">
-                <span className="visually-hidden">Loading...</span>
+        {/* Student Data Table */}
+        <div className="glass-card shadow-sm overflow-hidden mt-4">
+          <div className="p-3 border-bottom bg-light bg-opacity-50 d-flex justify-content-between align-items-center">
+            <h3 className="h6 mb-0 fw-bold" style={{ fontSize: "12px" }}>
+              STUDENT PERFORMANCE LISTING
+            </h3>
+            {isLoadingStudents && (
+              <div className="spinner-border spinner-border-sm text-primary" />
+            )}
+          </div>
+          <div className="table-responsive">
+            <table className="premium-table mb-0">
+              <thead>
+                <tr>
+                  <th style={{ width: "40%" }}>STUDENT IDENTITY</th>
+                  <th className="text-end">ASSESSMENT AVERAGE</th>
+                  <th className="text-center">RISK STATUS</th>
+                  <th style={{ width: "100px" }} />
+                </tr>
+              </thead>
+              <tbody
+                style={{
+                  opacity: isLoadingStudents ? 0.5 : 1,
+                  transition: "opacity 0.2s",
+                }}
+              >
+                {students.length ? (
+                  students.map((student, idx) => (
+                    <motion.tr
+                      key={student.name}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: idx * 0.05 }}
+                    >
+                      <td>
+                        <div className="fw-bold text-main mb-1">
+                          {student.name}
+                        </div>
+                        <div
+                          className="d-flex align-items-center gap-2"
+                          style={{ width: "100%" }}
+                        >
+                          <div
+                            className="flex-grow-1"
+                            style={{
+                              height: "4px",
+                              background: "#f1f5f9",
+                              borderRadius: "2px",
+                            }}
+                          >
+                            <div
+                              style={{
+                                width: `${Math.min(100, student.avgScore || 0)}%`,
+                                height: "100%",
+                                background:
+                                  student.status === "At Risk"
+                                    ? "#ef4444"
+                                    : "var(--accent)",
+                                borderRadius: "2px",
+                              }}
+                            />
+                          </div>
+                          <span
+                            style={{
+                              fontSize: "10px",
+                              color: "var(--text-soft)",
+                              fontWeight: 700,
+                            }}
+                          >
+                            {Number(student.avgScore).toFixed(0)}%
+                          </span>
+                        </div>
+                      </td>
+                      <td className="text-end">
+                        <span
+                          style={{
+                            fontWeight: 700,
+                            color: "var(--primary)",
+                            fontSize: "15px",
+                          }}
+                        >
+                          {Number(student.avgScore).toFixed(1)}%
+                        </span>
+                      </td>
+                      <td className="text-center">
+                        {student.status === "At Risk" ? (
+                          <span className="badge-risk">
+                            <AlertCircle size={12} /> AT RISK
+                          </span>
+                        ) : (
+                          <span className="badge-success">
+                            <CheckCircle2 size={12} /> GOOD
+                          </span>
+                        )}
+                      </td>
+                      <td className="text-end">
+                        <button className="btn-icon">
+                          <ChevronRight size={18} />
+                        </button>
+                      </td>
+                    </motion.tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={4} className="text-center py-5 text-muted">
+                      No students found matching current filters.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Table Pagination */}
+          {pagination.pages > 1 && (
+            <div className="p-3 border-top d-flex justify-content-between align-items-center bg-light bg-opacity-50">
+              <div className="text-soft" style={{ fontSize: "12px" }}>
+                Showing <strong>{students.length}</strong> of{" "}
+                <strong>{pagination.total}</strong> results
+              </div>
+              <div className="d-flex gap-2">
+                <button
+                  className="btn-premium py-1 px-3"
+                  disabled={currentPage === 1 || isLoadingStudents}
+                  onClick={() => setCurrentPage((p) => p - 1)}
+                  style={{ background: "white", border: "1px solid #e2e8f0" }}
+                >
+                  Previous
+                </button>
+                <div
+                  className="d-flex align-items-center px-2 fw-bold text-main"
+                  style={{ fontSize: "12px" }}
+                >
+                  {currentPage} / {pagination.pages}
+                </div>
+                <button
+                  className="btn-premium py-1 px-3"
+                  disabled={
+                    currentPage === pagination.pages || isLoadingStudents
+                  }
+                  onClick={() => setCurrentPage((p) => p + 1)}
+                  style={{ background: "white", border: "1px solid #e2e8f0" }}
+                >
+                  Next
+                </button>
               </div>
             </div>
           )}
-          <table className="table" style={{ border: "1px solid #ddd", borderBottom: "none", minWidth: "750px" }}>
-            <thead>
-              <tr style={{ background: "#516275", color: "#fff", fontSize: "10px", letterSpacing: "0.5px" }}>
-                <th style={{ padding: "12px 16px", fontWeight: "600", border: "none" }}>STUDENT</th>
-                <th style={{ padding: "12px 16px", fontWeight: "600", border: "none" }}>ASSESSMENT AVG SCORE</th>
-                <th style={{ padding: "12px 16px", fontWeight: "600", border: "none" }}>STATUS</th>
-              </tr>
-            </thead>
-            <tbody>
-              {students.length ? (
-                students.map((student) => (
-                  <tr
-                    key={`${student.name}-${student.avgScore}`}
-                    style={{ borderBottom: "1px solid #ddd", background: "white" }}
-                  >
-                    <td
-                      style={{
-                        verticalAlign: "middle",
-                        padding: "12px 16px",
-                        fontSize: "13px",
-                        color: "#333",
-                        width: "40%",
-                      }}
-                    >
-                      <div style={{ marginBottom: "4px" }}>{student.name}</div>
-                      <div
-                        style={{
-                          position: "relative",
-                          width: "100%",
-                          height: "8px",
-                          background: "#e0e0e0",
-                          borderRadius: "1px",
-                          marginTop: "15px",
-                        }}
-                      >
-                        <div
-                          style={{
-                            position: "absolute",
-                            left: `${Math.min(100, Math.max(0, student.avgScore || 0))}%`,
-                            top: "-6px",
-                            transform: "translateX(-50%)",
-                          }}
-                        >
-                          <svg width="12" height="12" viewBox="0 0 10 10" style={{ fill: "none", stroke: "#cfa625", strokeWidth: "2" }}>
-                            <path d="M5 1L9 5L5 9L1 5Z" />
-                          </svg>
-                        </div>
-                      </div>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          fontSize: "10px",
-                          color: "#999",
-                          marginTop: "2px",
-                        }}
-                      >
-                        <span>0</span>
-                        <span>50</span>
-                        <span>100</span>
-                      </div>
-                    </td>
-                    <td style={{ verticalAlign: "middle", padding: "12px 16px", fontSize: "13px", color: "#333" }}>
-                      {Number(student.avgScore ?? 0).toFixed(2)}%
-                    </td>
-                    <td style={{ verticalAlign: "middle", padding: "12px 16px" }}>
-                      {student.status === "At Risk" ? (
-                        <svg width="12" height="12" style={{ fill: "#d32f2f" }}>
-                          <path d="M0,0 L12,0 L6,10 Z" />
-                        </svg>
-                      ) : (
-                        <svg width="12" height="12" style={{ fill: "#388e3c" }}>
-                          <path d="M6,0 L12,10 L0,10 Z" />
-                        </svg>
-                      )}
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={3} className="text-muted py-4 text-center" style={{ background: "white" }}>
-                    {isLoadingStudents ? "Loading..." : "No students found for the selected filters."}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
         </div>
-
-        {/* Pagination Controls */}
-        {pagination.pages > 1 && (
-          <div className="d-flex justify-content-between align-items-center mt-3 pt-3" style={{ borderTop: "1px solid #eee" }}>
-            <div style={{ fontSize: "11px", color: "#666" }}>
-              Showing {students.length} of {pagination.total} students (Page {currentPage} of {pagination.pages})
-            </div>
-            <div className="d-flex gap-2">
-              <button
-                className="btn btn-sm btn-outline-secondary"
-                disabled={currentPage === 1 || isLoadingStudents}
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                style={{ fontSize: "11px", padding: "4px 12px" }}
-              >
-                Previous
-              </button>
-              <button
-                className="btn btn-sm btn-outline-secondary"
-                disabled={currentPage === pagination.pages || isLoadingStudents}
-                onClick={() => setCurrentPage((p) => Math.min(pagination.pages, p + 1))}
-                style={{ fontSize: "11px", padding: "4px 12px" }}
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        )}
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <Layout>
       {!isEditing && report ? (
-        <>
-          <div
-            className="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-3 gap-3"
-            style={{ borderBottom: "1px solid #ddd", paddingBottom: "12px" }}
-          >
+        <div className="container-fluid py-4">
+          <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-5 gap-3">
             <div>
-              <button className="back-link mb-2" onClick={goBack}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M19 12H5M12 5l-7 7 7 7" />
-                </svg>
-                Back to Advanced Reports
+              <button
+                className="btn-back d-flex align-items-center gap-2 mb-2"
+                onClick={goBack}
+              >
+                <ArrowLeft size={16} /> Back to Dashboard
               </button>
+              <h1 className="h3 fw-bold mb-0 text-main">
+                {reportName || "Student Performance"}
+              </h1>
+              <p className="text-soft mb-0" style={{ fontSize: "14px" }}>
+                In-depth student performance analysis across all course
+                categories.
+              </p>
             </div>
 
             <div className="d-flex flex-column align-items-md-end gap-2">
-              <div className="d-flex flex-wrap align-items-center gap-3 mt-2 mt-md-0 justify-content-md-end">
+              <div className="d-flex gap-2 flex-wrap">
                 <button
+                  className={`btn-premium ${isConfirmingDelete ? "bg-danger text-white" : ""}`}
                   onClick={handleDelete}
-                  onMouseLeave={() => setIsConfirmingDelete(false)}
-                  style={{
-                    border: isConfirmingDelete ? "1px solid #d32f2f" : "none",
-                    background: isConfirmingDelete ? "#fff5f5" : "none",
-                    fontSize: "11px",
-                    fontWeight: 600,
-                    color: "#d32f2f",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "4px",
-                    padding: "4px 8px",
-                    borderRadius: "4px",
-                  }}
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                  </svg>
-                  {isConfirmingDelete ? "CONFIRM DELETE?" : "DELETE"}
+                  {isConfirmingDelete ? (
+                    "CONFIRM"
+                  ) : (
+                    <>
+                      <Trash2 size={16} /> DELETE
+                    </>
+                  )}
                 </button>
                 <button
+                  className="btn-premium"
                   onClick={() => setIsEditing(true)}
-                  style={{
-                    border: "none",
-                    background: "none",
-                    fontSize: "11px",
-                    fontWeight: 600,
-                    color: "#1a73c1",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "4px",
-                    marginLeft: "15px",
-                  }}
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="12" cy="12" r="3" />
-                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-                  </svg>
-                  EDIT & CREATE NEW
+                  <Edit3 size={16} /> MODIFY
                 </button>
                 <button
-                  className="btn btn-sm"
-                  style={{
-                    background: "#008e45",
-                    color: "white",
-                    fontSize: "11px",
-                    fontWeight: 600,
-                    border: "none",
-                    padding: "6px 14px",
-                    borderRadius: "3px",
-                  }}
+                  className="btn-premium btn-accent"
                   onClick={rerunReport}
                   disabled={isGenerating}
                 >
-                  {isGenerating ? "RERUNNING..." : "RERUN REPORT"}
+                  <RefreshCw size={16} className={isGenerating ? "spin" : ""} />{" "}
+                  {isGenerating ? "RUNNING..." : "RERUN"}
                 </button>
               </div>
-              <div className="d-flex align-items-center gap-2" style={{ fontSize: "11px", color: "#666" }}>
+              <div
+                className="d-flex align-items-center gap-2 text-soft"
+                style={{ fontSize: "11px" }}
+              >
                 <span>{rerunLabel}</span>
                 {rerunHistory.length > 0 && (
                   <button
+                    className="btn-link p-0 text-primary"
                     onClick={() => setShowHistory(!showHistory)}
-                    style={{
-                      border: "none",
-                      background: "none",
-                      color: "#1a73c1",
-                      padding: 0,
-                      fontSize: "11px",
-                      textDecoration: "underline",
-                      cursor: "pointer",
-                    }}
                   >
-                    {showHistory ? "Hide History" : "View History Log"}
+                    {showHistory ? "Hide History" : "View History"}
                   </button>
                 )}
               </div>
 
-              {showHistory && rerunHistory.length > 0 && (
-                <div
-                  className="mt-2 text-start p-2 slide-down"
-                  style={{
-                    background: "#f9f9f9",
-                    border: "1px solid #ddd",
-                    borderRadius: "4px",
-                    width: "100%",
-                    maxWidth: "400px",
-                  }}
-                >
-                  <div style={{ fontSize: "10px", fontWeight: 700, color: "#555", marginBottom: "8px", textTransform: "uppercase" }}>
-                    Rerun History Log
-                  </div>
-                  <div style={{ maxHeight: "150px", overflowY: "auto" }}>
-                    <table style={{ width: "100%", fontSize: "10px", borderCollapse: "collapse" }}>
-                      <thead>
-                        <tr style={{ borderBottom: "1px solid #eee", textAlign: "left", color: "#666" }}>
-                          <th style={{ padding: "4px 0" }}>DATE</th>
-                          <th>STUDENTS</th>
-                          <th>AT-RISK</th>
-                          <th style={{ textAlign: "right" }}>AVG</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {rerunHistory.map((entry, idx) => (
-                          <tr key={idx} style={{ borderBottom: "1px solid #f0f0f0" }}>
-                            <td style={{ padding: "6px 0", color: "#333" }}>
-                              {new Date(entry.rerunAt).toLocaleString([], { dateStyle: "short", timeStyle: "short" })}
-                            </td>
-                            <td style={{ color: "#333" }}>{entry.totalStudents}</td>
-                            <td style={{ color: entry.atRiskCount > 0 ? "#d32f2f" : "#333" }}>{entry.atRiskCount}</td>
-                            <td style={{ textAlign: "right", color: "#333" }}>{Number(entry.avgScore || 0).toFixed(1)}%</td>
+              <AnimatePresence>
+                {showHistory && rerunHistory.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    className="glass-card p-3 mt-2 shadow-lg"
+                    style={{ maxWidth: "400px", zIndex: 10 }}
+                  >
+                    <div
+                      className="fw-bold mb-2 text-soft d-flex align-items-center gap-2"
+                      style={{ fontSize: "11px" }}
+                    >
+                      <Clock size={14} /> REFRESH HISTORY LOG
+                    </div>
+                    <div
+                      className="table-responsive"
+                      style={{ maxHeight: "200px" }}
+                    >
+                      <table
+                        className="table table-sm mb-0"
+                        style={{ fontSize: "11px" }}
+                      >
+                        <thead>
+                          <tr>
+                            <th>DATE</th>
+                            <th>STUDENTS</th>
+                            <th className="text-end">AVG</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
+                        </thead>
+                        <tbody>
+                          {rerunHistory.map((h, i) => (
+                            <tr key={i}>
+                              <td>
+                                {new Date(h.rerunAt).toLocaleDateString()}
+                              </td>
+                              <td>{h.totalStudents}</td>
+                              <td className="text-end fw-bold text-primary">
+                                {Number(h.avgScore || 0).toFixed(1)}%
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </div>
-          {error && <div className="alert alert-danger mt-3">{error}</div>}
+
+          {error && (
+            <div className="alert alert-danger rounded-4 shadow-sm border-0 mb-4">
+              {error}
+            </div>
+          )}
           {renderReportBody()}
-        </>
+        </div>
       ) : (
         <ReportFormShell
           title="Student Performance Report"
@@ -594,14 +667,13 @@ export default function StudentCategoryPerformanceReport({ initialConfig }) {
               courseId={courseId}
               setCourseId={setCourseId}
               showDateRange={false}
+              isMultipleCourse={true}
             />
             <div className="col-divider d-none d-md-block" />
             <ReportFormRight
               sliders={SLIDERS}
-              assessmentTypes={assessmentTypes}
               sliderValues={sliderValues}
-              onValuesChange={({ assessmentTypes: nextTypes, sliderValues: nextSliderValues }) => {
-                setAssessmentTypes(nextTypes || assessmentTypes);
+              onValuesChange={({ sliderValues: nextSliderValues }) => {
                 setSliderValues((prev) => ({
                   ...prev,
                   ...(nextSliderValues || {}),

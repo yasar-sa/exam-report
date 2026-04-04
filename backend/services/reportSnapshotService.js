@@ -64,31 +64,26 @@ const buildCommonConfig = (config = {}) => {
       config.thresholdStudent ?? thresholds.studentAtRisk,
       DEFAULT_THRESHOLD,
     ),
-    typeList: buildTypeList(config),
     assessmentIdList: parseCommaList(
       config.assessmentIds || config.selectedAssessmentIds,
     ).map((id) => toObjectId(id, "assessmentId")),
     courseIds: parseCommaList(config.courseId || config.courseIds).map((id) =>
       toObjectId(id, "courseId"),
     ),
+    typeList: buildTypeList(config),
   };
 };
 
 const buildAssessmentMatch = ({
   courseIds,
-  typeList,
   assessmentIdList,
   start,
   end,
   includeDate,
 }) => {
   const match = {
-    "assessment.courseId": { $in: courseIds },
+    "course._id": { $in: courseIds },
   };
-
-  if (typeList.length > 0) {
-    match["assessment.type"] = { $in: typeList };
-  }
 
   if (assessmentIdList.length > 0) {
     match["assessment._id"] = { $in: assessmentIdList };
@@ -114,40 +109,55 @@ const fetchResultRows = async (assessmentMatch) => {
   return Result.aggregate([
     {
       $lookup: {
-        from: "assessments",
-        localField: "assessmentId",
+        from: "courses", //name of the collection in the db digiassess
+        localField: "_reportCourse", //field name of the courses collection in the student_result collection
+        foreignField: "_id", //field name of the course in the courses collection
+        as: "reportInstance", // name of the new name to be created
+      },
+    },
+    { $unwind: "$reportInstance" },
+    { $match: { "reportInstance.status.overAll": "PUBLISHED" } },
+    {
+      $lookup: {
+        from: "exam_course_groups",
+        localField: "reportInstance._courseGroup",
         foreignField: "_id",
         as: "assessment",
       },
     },
     { $unwind: "$assessment" },
-    { $match: assessmentMatch },
+    { $match: { "assessment.status": "COMPLETED" } },
     {
       $lookup: {
-        from: "students",
-        localField: "studentId",
-        foreignField: "_id",
-        as: "student",
+        from: "course_hierarchies",
+        localField: "assessment.name",
+        foreignField: "name",
+        as: "course",
       },
     },
-    { $unwind: "$student" },
+    { $unwind: "$course" },
+    { $match: assessmentMatch },
     {
       $project: {
         _id: 0,
-        assessmentId: "$assessment._id",
+        assessmentId: "$reportInstance._id",
         assessmentName: "$assessment.name",
-        assessmentType: "$assessment.type",
         assessmentDate: "$assessment.date",
-        assessmentIsPublished: "$assessment.isPublished",
-        courseId: "$assessment.courseId",
+        courseId: "$course._id",
         studentId: "$student._id",
-        firstName: "$student.firstName",
-        lastName: "$student.lastName",
-        name: { $concat: ["$student.firstName", " ", "$student.lastName"] },
-        score: 1,
+        name: "$student.name",
+        score: "$percentage",
+        marks: 1,
+        totalMarks: 1,
+        grade: 1,
+        percentage: 1,
+        year: "$assessment.hierarchy.year.name",
+        term: "$assessment.hierarchy.term.name",
+        level: "$assessment.hierarchy.level.name",
+        program: "$assessment.hierarchy.program.name",
       },
     },
-    { $sort: { assessmentDate: -1, score: 1, lastName: 1, firstName: 1 } },
+    { $sort: { assessmentDate: -1, score: 1, name: 1 } },
   ]);
 };
 
@@ -174,9 +184,11 @@ const buildCourseSnapshotFromRows = ({
       assessmentMap.set(assessmentKey, {
         _id: row.assessmentId,
         name: row.assessmentName,
-        type: row.assessmentType,
         date: row.assessmentDate,
-        isPublished: row.assessmentIsPublished,
+        year: row.year,
+        term: row.term,
+        level: row.level,
+        program: row.program,
         scoreTotal: 0,
         totalStudents: 0,
         atRiskStudents: 0,
@@ -205,10 +217,11 @@ const buildCourseSnapshotFromRows = ({
     students.push({
       assessmentId: row.assessmentId,
       studentId: row.studentId,
-      firstName: row.firstName,
-      lastName: row.lastName,
       name: row.name,
       score: row.score,
+      marks: row.marks,
+      totalMarks: row.totalMarks,
+      grade: row.grade,
       status: row.score < thresholdStudent ? "At Risk" : "Good",
     });
   }
@@ -221,9 +234,11 @@ const buildCourseSnapshotFromRows = ({
       return {
         _id: assessment._id,
         name: assessment.name,
-        type: assessment.type,
         date: assessment.date,
-        isPublished: assessment.isPublished,
+        year: assessment.year,
+        term: assessment.term,
+        level: assessment.level,
+        program: assessment.program,
         avgScore,
         totalStudents: assessment.totalStudents,
         atRiskStudents: assessment.atRiskStudents,
@@ -280,8 +295,6 @@ const buildStudentSnapshotFromRows = ({
     if (!studentMap.has(studentKey)) {
       studentMap.set(studentKey, {
         _id: row.studentId,
-        firstName: row.firstName,
-        lastName: row.lastName,
         name: row.name,
         scoreTotal: 0,
         count: 0,
@@ -298,8 +311,6 @@ const buildStudentSnapshotFromRows = ({
       const avgScore = student.count > 0 ? student.scoreTotal / student.count : 0;
       return {
         studentId: student._id,
-        firstName: student.firstName,
-        lastName: student.lastName,
         name: student.name,
         avgScore,
         status: avgScore < thresholdStudent ? "At Risk" : "Good",
@@ -307,8 +318,7 @@ const buildStudentSnapshotFromRows = ({
     })
     .sort((first, second) => {
       if (first.avgScore !== second.avgScore) return first.avgScore - second.avgScore;
-      if (first.lastName !== second.lastName) return first.lastName.localeCompare(second.lastName);
-      return first.firstName.localeCompare(second.firstName);
+      return first.name.localeCompare(second.name);
     });
 
   return {
