@@ -144,6 +144,7 @@ const fetchResultRows = async (assessmentMatch) => {
         assessmentName: "$assessment.name",
         assessmentDate: "$assessment.date",
         courseId: "$course._id",
+        courseName: "$course.name",
         studentId: "$student._id",
         name: "$student.name",
         score: "$percentage",
@@ -172,16 +173,29 @@ const buildCourseSnapshotFromRows = ({
   thresholdStudent,
   assessmentIdList,
 }) => {
-  const assessmentMap = new Map();
-  const studentAverageMap = new Map();
+  const courseMap = new Map();
   const students = [];
 
   for (const row of rows) {
+    const courseKey = String(row.courseId);
     const assessmentKey = String(row.assessmentId);
     const studentKey = String(row.studentId);
 
-    if (!assessmentMap.has(assessmentKey)) {
-      assessmentMap.set(assessmentKey, {
+    if (!courseMap.has(courseKey)) {
+      courseMap.set(courseKey, {
+        _id: row.courseId,
+        name: row.courseName,
+        assessmentMap: new Map(),
+        studentMap: new Map(),
+        scoreTotal: 0,
+        assessmentCount: 0,
+      });
+    }
+
+    const courseData = courseMap.get(courseKey);
+
+    if (!courseData.assessmentMap.has(assessmentKey)) {
+      courseData.assessmentMap.set(assessmentKey, {
         _id: row.assessmentId,
         name: row.assessmentName,
         date: row.assessmentDate,
@@ -195,24 +209,22 @@ const buildCourseSnapshotFromRows = ({
       });
     }
 
-    const assessment = assessmentMap.get(assessmentKey);
+    const assessment = courseData.assessmentMap.get(assessmentKey);
     assessment.scoreTotal += row.score;
     assessment.totalStudents += 1;
     if (row.score < thresholdStudent) {
       assessment.atRiskStudents += 1;
     }
 
-    if (!studentAverageMap.has(studentKey)) {
-      studentAverageMap.set(studentKey, {
-        studentId: row.studentId,
-        scoreTotal: 0,
-        count: 0,
+    // Unique student tracking per course for course-level stats
+    if (!courseData.studentMap.has(studentKey)) {
+      courseData.studentMap.set(studentKey, {
+        isAtRisk: false,
       });
     }
-
-    const studentAverage = studentAverageMap.get(studentKey);
-    studentAverage.scoreTotal += row.score;
-    studentAverage.count += 1;
+    if (row.score < thresholdStudent) {
+      courseData.studentMap.get(studentKey).isAtRisk = true;
+    }
 
     students.push({
       assessmentId: row.assessmentId,
@@ -226,36 +238,46 @@ const buildCourseSnapshotFromRows = ({
     });
   }
 
-  const assessments = Array.from(assessmentMap.values())
-    .map((assessment) => {
-      const avgScore =
-        assessment.totalStudents > 0 ? assessment.scoreTotal / assessment.totalStudents : 0;
-
+  const courseGroups = Array.from(courseMap.values()).map((course) => {
+    const assessments = Array.from(course.assessmentMap.values()).map((a) => {
+      const avgScore = a.totalStudents > 0 ? a.scoreTotal / a.totalStudents : 0;
       return {
-        _id: assessment._id,
-        name: assessment.name,
-        date: assessment.date,
-        year: assessment.year,
-        term: assessment.term,
-        level: assessment.level,
-        program: assessment.program,
+        ...a,
         avgScore,
-        totalStudents: assessment.totalStudents,
-        atRiskStudents: assessment.atRiskStudents,
-        atRiskStudentPct:
-          assessment.totalStudents > 0
-            ? (assessment.atRiskStudents / assessment.totalStudents) * 100
-            : 0,
+        atRiskStudentPct: a.totalStudents > 0 ? (a.atRiskStudents / a.totalStudents) * 100 : 0,
         status: avgScore < thresholdCourse ? "At Risk" : "Good",
       };
-    })
-    .sort((first, second) => new Date(second.date) - new Date(first.date));
+    });
 
-  const totalAssessmentsCount = assessments.length;
-  const atRiskAssessmentsCount = assessments.filter((a) => a.status === "At Risk").length;
+    const studentList = Array.from(course.studentMap.values());
+    const totalStudents = studentList.length;
+    const atRiskStudents = studentList.filter((s) => s.isAtRisk).length;
+    const totalAssessments = assessments.length;
+    const atRiskAssessments = assessments.filter((a) => a.status === "At Risk").length;
+    const courseAvgScore =
+      totalAssessments > 0
+        ? assessments.reduce((sum, a) => sum + a.avgScore, 0) / totalAssessments
+        : 0;
+
+    return {
+      courseId: course._id,
+      courseName: course.name,
+      avgScore: courseAvgScore,
+      status: courseAvgScore < thresholdCourse ? "At Risk" : "Good",
+      totalAssessments,
+      atRiskAssessments,
+      totalStudents,
+      atRiskStudents,
+      assessments,
+    };
+  });
+
+  const totalAssessmentsCount = courseGroups.reduce((sum, g) => sum + g.totalAssessments, 0);
+  const atRiskAssessmentsCount = courseGroups.reduce((sum, g) => sum + g.atRiskAssessments, 0);
+  const atRiskCoursesCount = courseGroups.filter((g) => g.status === "At Risk").length;
   const avgScore =
-    totalAssessmentsCount > 0
-      ? assessments.reduce((sum, a) => sum + a.avgScore, 0) / totalAssessmentsCount
+    courseGroups.length > 0
+      ? courseGroups.reduce((sum, g) => sum + g.avgScore, 0) / courseGroups.length
       : 0;
 
   return {
@@ -272,8 +294,11 @@ const buildCourseSnapshotFromRows = ({
       selectedAssessmentIds: assessmentIdList.map((id) => String(id)),
       totalAssessmentsCount,
       atRiskAssessmentsCount,
+      totalCoursesCount: courseGroups.length,
+      atRiskCoursesCount,
       avgScore,
-      assessments,
+      courseGroups, // Nested data structure
+      assessments: courseGroups.flatMap((g) => g.assessments), // Stay compatible with old flat list if needed
     },
     students,
   };

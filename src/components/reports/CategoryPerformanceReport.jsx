@@ -72,6 +72,7 @@ export default function CategoryPerformanceReport({ initialConfig }) {
   );
   const [showHistory, setShowHistory] = useState(false);
   const [assessmentData, setAssessmentData] = useState({});
+  const [expandedCourseIds, setExpandedCourseIds] = useState({});
 
   const shouldLoadCourses = isEditing || !initialConfig;
 
@@ -284,115 +285,63 @@ export default function CategoryPerformanceReport({ initialConfig }) {
 
   const renderReportBody = () => {
     const assessments = report?.assessments || [];
-    const atRiskCount =
-      assessments.filter((a) => a.status === "At Risk").length || 0;
+    const courseGroups = report?.courseGroups || [
+      {
+        courseName: report?.courseName || "All Courses",
+        totalAssessments: assessments.length,
+        atRiskAssessments: assessments.filter((a) => a.status === "At Risk").length,
+        avgScore: report?.avgScore || 0,
+        totalStudents: report?.totalStudents || 0,
+        atRiskStudents: report?.atRiskStudentsCount || 0,
+        assessments: assessments,
+        status: report?.avgScore < (report?.thresholds?.courseAtRisk || 60) ? "At Risk" : "Good",
+      },
+    ];
+
+    const atRiskCoursesCount = report?.atRiskCoursesCount ?? courseGroups.filter(g => g.status === 'At Risk').length;
+    const totalCoursesCount = report?.totalCoursesCount ?? courseGroups.length;
     const avgScore = report?.avgScore || 0;
+
+    const toggleCourse = (courseId) => {
+      setExpandedCourseIds(prev => ({
+        ...prev,
+        [courseId]: !prev[courseId]
+      }));
+    };
 
     return (
       <div className="report-body fade-in">
         <div className="row g-3 mb-4">
           <div className="col-md-4">
             <div className="glass-card p-3 d-flex align-items-center gap-3">
-              <div
-                style={{
-                  background: "#fee2e2",
-                  padding: "10px",
-                  borderRadius: "6px",
-                  color: "#ef4444",
-                }}
-              >
+              <div style={{ background: "#fee2e2", padding: "10px", borderRadius: "6px", color: "#ef4444" }}>
                 <Activity size={24} />
               </div>
               <div>
-                <div
-                  style={{
-                    fontSize: "11px",
-                    color: "var(--text-soft)",
-                    fontWeight: 700,
-                    letterSpacing: "0.02em",
-                  }}
-                >
-                  AT-RISK EXAMS
-                </div>
-                <div
-                  style={{
-                    fontSize: "20px",
-                    fontWeight: 700,
-                    color: "var(--text-main)",
-                  }}
-                >
-                  {atRiskCount}
-                </div>
+                <div style={{ fontSize: "11px", color: "var(--text-soft)", fontWeight: 700, letterSpacing: "0.02em" }}>AT-RISK COURSES</div>
+                <div style={{ fontSize: "20px", fontWeight: 700, color: "var(--text-main)" }}>{atRiskCoursesCount}</div>
               </div>
             </div>
           </div>
           <div className="col-md-4">
             <div className="glass-card p-3 d-flex align-items-center gap-3">
-              <div
-                style={{
-                  background: "#eef2ff",
-                  padding: "10px",
-                  borderRadius: "6px",
-                  color: "var(--primary)",
-                }}
-              >
-                <FileText size={24} />
+              <div style={{ background: "#eef2ff", padding: "10px", borderRadius: "6px", color: "#var(--primary)" }}>
+                <BookOpen size={24} />
               </div>
               <div>
-                <div
-                  style={{
-                    fontSize: "11px",
-                    color: "var(--text-soft)",
-                    fontWeight: 700,
-                    letterSpacing: "0.02em",
-                  }}
-                >
-                  TOTAL EXAMS
-                </div>
-                <div
-                  style={{
-                    fontSize: "20px",
-                    fontWeight: 700,
-                    color: "var(--text-main)",
-                  }}
-                >
-                  {assessments.length}
-                </div>
+                <div style={{ fontSize: "11px", color: "var(--text-soft)", fontWeight: 700, letterSpacing: "0.02em" }}>TOTAL COURSES</div>
+                <div style={{ fontSize: "20px", fontWeight: 700, color: "var(--text-main)" }}>{totalCoursesCount}</div>
               </div>
             </div>
           </div>
           <div className="col-md-4">
             <div className="glass-card p-3 d-flex align-items-center gap-3">
-              <div
-                style={{
-                  background: "#ecfdf5",
-                  padding: "10px",
-                  borderRadius: "6px",
-                  color: "var(--accent)",
-                }}
-              >
+              <div style={{ background: "#ecfdf5", padding: "10px", borderRadius: "6px", color: "var(--accent)" }}>
                 <BarChart3 size={24} />
               </div>
               <div>
-                <div
-                  style={{
-                    fontSize: "11px",
-                    color: "var(--text-soft)",
-                    fontWeight: 700,
-                    letterSpacing: "0.02em",
-                  }}
-                >
-                  AVG SCORE
-                </div>
-                <div
-                  style={{
-                    fontSize: "20px",
-                    fontWeight: 700,
-                    color: "var(--text-main)",
-                  }}
-                >
-                  {Number(avgScore).toFixed(1)}%
-                </div>
+                <div style={{ fontSize: "11px", color: "var(--text-soft)", fontWeight: 700, letterSpacing: "0.02em" }}>AVG SCORE</div>
+                <div style={{ fontSize: "20px", fontWeight: 700, color: "var(--text-main)" }}>{Number(avgScore).toFixed(1)}%</div>
               </div>
             </div>
           </div>
@@ -403,257 +352,190 @@ export default function CategoryPerformanceReport({ initialConfig }) {
           style={{ fontSize: "11px", color: "var(--text-soft)" }}
         >
           <div className="bg-white border px-3 py-1 rounded d-flex align-items-center gap-2">
-            <Calendar size={13} /> {report?.startedAt || "Any"} —{" "}
-            {report?.endedAt || "Any"}
+            <Calendar size={13} /> {report?.startedAt || "Any"} — {report?.endedAt || "Any"}
           </div>
           <div className="bg-white border px-3 py-1 rounded d-flex align-items-center gap-2">
-            <BookOpen size={13} /> COURSE:{" "}
-            <span className="text-main">
-              {report?.courseName || courseName}
-            </span>
+            <BookOpen size={13} /> COURSE: <span className="text-main">{report?.courseName || courseName}</span>
           </div>
           <div className="bg-white border px-3 py-1 rounded d-flex align-items-center gap-2">
-            <Activity size={13} /> Course Limit:{" "}
-            {report?.thresholds?.courseAtRisk ?? 0}%
+            <Activity size={13} /> Course Limit: {report?.thresholds?.courseAtRisk ?? 0}%
           </div>
           <div className="bg-white border px-3 py-1 rounded d-flex align-items-center gap-2">
-            <Users size={13} /> Student Limit:{" "}
-            {report?.thresholds?.studentAtRisk ?? 0}%
+            <Users size={13} /> Student Limit: {report?.thresholds?.studentAtRisk ?? 0}%
           </div>
         </div>
 
-        <div className="glass-card shadow-sm overflow-hidden">
-          <div className="p-3 border-bottom bg-light bg-opacity-50">
-            <h3 className="h6 mb-0 fw-bold" style={{ fontSize: "12px" }}>
-              DETAILED PERFORMANCE BREAKDOWN
-            </h3>
-          </div>
-          <div className="table-responsive">
-            <table className="premium-table mb-0">
-              <thead>
-                <tr>
-                  <th>EXAM NAME</th>
-                  <th>YEAR / TERM</th>
-                  <th>SCHEDULED</th>
-                  <th className="text-end">AVG SCORE</th>
-                  <th className="text-center">STATUS</th>
-                  <th style={{ width: "160px" }} />
-                </tr>
-              </thead>
-              <tbody>
-                {assessments.length ? (
-                  assessments.map((assessment, idx) => {
-                    const isExpanded = expandedAssessmentIds[assessment._id];
-                    const detail = assessmentData[assessment._id] || {};
-                    const students = detail.data || [];
-                    return (
-                      <Fragment key={assessment._id}>
-                        <motion.tr
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: idx * 0.05 }}
-                          onClick={() => toggleAssessmentRow(assessment._id)}
-                          style={{
-                            cursor: "pointer",
-                            background: isExpanded
-                              ? "rgba(37, 99, 235, 0.04)"
-                              : "transparent",
-                          }}
-                        >
-                          <td className="fw-bold text-main">
-                            {assessment.name}
-                          </td>
-                          <td className="text-soft">
-                            {assessment.year || "-"} / {assessment.term || "-"}
-                          </td>
-                          <td className="text-soft">
-                            <div className="d-flex align-items-center gap-2">
-                              <Clock size={12} />
-                              {assessment.date
-                                ? new Date(assessment.date).toLocaleDateString()
-                                : "-"}
-                            </div>
-                          </td>
-                          <td className="text-end">
-                            <span
-                              style={{
-                                fontWeight: 700,
-                                color: "var(--primary)",
-                              }}
-                            >
-                              {Number(assessment.avgScore ?? 0).toFixed(1)}%
-                            </span>
-                          </td>
-                          <td className="text-center">
-                            {assessment.status === "At Risk" ? (
-                              <span
-                                className="badge-risk"
-                                style={{ borderRadius: "4px" }}
-                              >
-                                <AlertCircle size={12} /> AT RISK
-                              </span>
-                            ) : (
-                              <span
-                                className="badge-success"
-                                style={{ borderRadius: "4px" }}
-                              >
-                                <CheckCircle2 size={12} /> GOOD
-                              </span>
-                            )}
-                          </td>
-                          <td className="text-end">
-                            <button className="btn-icon">
-                              {isExpanded ? (
-                                <ChevronDown size={18} />
-                              ) : (
-                                <ChevronRight size={18} />
-                              )}
-                            </button>
-                          </td>
-                        </motion.tr>
-                        <AnimatePresence>
-                          {isExpanded && (
-                            <motion.tr
-                              initial={{ opacity: 0 }}
-                              animate={{ opacity: 1 }}
-                              exit={{ opacity: 0 }}
-                            >
-                              <td colSpan={6} className="p-0 border-0">
-                                <div
-                                  className="p-4"
-                                  style={{
-                                    background: "#f8fafc",
-                                    margin: "0 20px 20px 20px",
-                                    borderRadius: "12px",
-                                    border: "1px solid #e2e8f0",
-                                  }}
-                                >
-                                  <div className="d-flex justify-content-between align-items-center mb-3">
-                                    <div
-                                      className="d-flex align-items-center gap-2 fw-bold text-soft"
-                                      style={{ fontSize: "11px" }}
-                                    >
-                                      <Users size={14} /> STUDENT RESULTS
-                                      SNAPSHOT
-                                      {detail.loading && (
-                                        <div className="spinner-border spinner-border-sm text-primary ms-2" />
+        <div className="space-y-4">
+          {courseGroups.map((group, groupIdx) => {
+            const courseId = group.courseId || `group-${groupIdx}`;
+            const isExpanded = expandedCourseIds[courseId] !== false; // Default to expanded
+            const assessmentsForGroup = group.assessments || [];
+
+            return (
+              <div key={courseId} className="glass-card shadow-sm overflow-hidden mb-4">
+                <div 
+                  className="p-3 border-bottom bg-light bg-opacity-50 d-flex justify-content-between align-items-center"
+                  onClick={() => toggleCourse(courseId)}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <div className="d-flex align-items-center gap-3">
+                    {group.status === "At Risk" ? (
+                      <span className="badge-risk" style={{ borderRadius: '4px' }}>At Risk</span>
+                    ) : (
+                      <span className="badge-success" style={{ borderRadius: '4px' }}>Good</span>
+                    )}
+                    <h3 className="h6 mb-0 fw-bold text-main" style={{ fontSize: '14px' }}>{group.courseName}</h3>
+                  </div>
+                  <div className="d-flex align-items-center gap-4">
+                    <div style={{ fontSize: '11px', color: 'var(--text-soft)' }}>
+                      At-Risk Assessments: <strong className="text-danger">{group.atRiskAssessments}</strong> | 
+                      At-Risk Students: <strong className="text-danger">{group.atRiskStudents}/{group.totalStudents}</strong> | 
+                      Total Assessments: <strong>{group.totalAssessments}</strong>
+                    </div>
+                    {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                  </div>
+                </div>
+
+                <AnimatePresence>
+                  {isExpanded && (
+                    <motion.div 
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <div className="table-responsive">
+                        <table className="premium-table mb-0">
+                          <thead>
+                            <tr>
+                              <th>EXAM NAME</th>
+                              <th>YEAR / TERM</th>
+                              <th>SCHEDULED</th>
+                              <th className="text-end">AVG SCORE</th>
+                              <th className="text-center">STATUS</th>
+                              <th style={{ width: "160px" }} />
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {assessmentsForGroup.length ? assessmentsForGroup.map((assessment, idx) => {
+                              const isRowExpanded = expandedAssessmentIds[assessment._id];
+                              const detail = assessmentData[assessment._id] || {};
+                              const students = detail.data || [];
+                              return (
+                                <Fragment key={assessment._id}>
+                                  <motion.tr
+                                    initial={{ opacity: 0, y: 10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ delay: idx * 0.05 }}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleAssessmentRow(assessment._id);
+                                    }}
+                                    style={{ cursor: 'pointer', background: isRowExpanded ? 'rgba(37, 99, 235, 0.04)' : 'transparent' }}
+                                  >
+                                    <td className="fw-bold text-main">{assessment.name}</td>
+                                    <td className="text-soft">{assessment.year || "-"} / {assessment.term || "-"}</td>
+                                    <td className="text-soft">
+                                      <div className="d-flex align-items-center gap-2">
+                                        <Clock size={12} />
+                                        {assessment.date ? new Date(assessment.date).toLocaleDateString() : "-"}
+                                      </div>
+                                    </td>
+                                    <td className="text-end">
+                                      <span style={{ fontWeight: 700, color: "var(--primary)" }}>{Number(assessment.avgScore ?? 0).toFixed(1)}%</span>
+                                    </td>
+                                    <td className="text-center">
+                                      {assessment.status === "At Risk" ? (
+                                        <span className="badge-risk" style={{ borderRadius: '4px' }}><AlertCircle size={12} /> AT RISK</span>
+                                      ) : (
+                                        <span className="badge-success" style={{ borderRadius: '4px' }}><CheckCircle2 size={12} /> GOOD</span>
                                       )}
-                                    </div>
-                                  </div>
-                                  <div className="table-responsive rounded-3 border bg-white overflow-hidden">
-                                    <table className="table table-sm table-hover mb-0">
-                                      <thead className="bg-light">
-                                        <tr
-                                          style={{
-                                            fontSize: "10px",
-                                            color: "var(--text-soft)",
-                                          }}
-                                        >
-                                          <th className="ps-3 py-2">STUDENT</th>
-                                          <th className="py-2 text-end pe-3">
-                                            SCORE
-                                          </th>
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        {students.length ? (
-                                          students.map((s, i) => (
-                                            <tr
-                                              key={i}
-                                              style={{ fontSize: "12px" }}
-                                            >
-                                              <td className="ps-3 py-2 fw-medium">
-                                                {s.name}
-                                              </td>
-                                              <td className="text-end pe-3 py-2">
-                                                <span
-                                                  className={
-                                                    s.score <
-                                                    (report?.thresholds
-                                                      ?.studentAtRisk || 70)
-                                                      ? "text-danger fw-bold"
-                                                      : "fw-bold text-accent"
-                                                  }
+                                    </td>
+                                    <td className="text-end">
+                                      <button className="btn-icon">
+                                        {isRowExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                                      </button>
+                                    </td>
+                                  </motion.tr>
+                                  <AnimatePresence>
+                                    {isRowExpanded && (
+                                      <motion.tr initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                                        <td colSpan={6} className="p-0 border-0">
+                                          <div className="p-4" style={{ background: '#f8fafc', margin: '0 20px 20px 20px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                                            <div className="d-flex justify-content-between align-items-center mb-3">
+                                              <div className="d-flex align-items-center gap-2 fw-bold text-soft" style={{ fontSize: '11px' }}>
+                                                <Users size={14} /> STUDENT RESULTS SNAPSHOT
+                                                {detail.loading && <div className="spinner-border spinner-border-sm text-primary ms-2" />}
+                                              </div>
+                                            </div>
+                                            <div className="table-responsive rounded-3 border bg-white overflow-hidden">
+                                              <table className="table table-sm table-hover mb-0">
+                                                <thead className="bg-light">
+                                                  <tr style={{ fontSize: '10px', color: 'var(--text-soft)' }}>
+                                                    <th className="ps-3 py-2">STUDENT</th>
+                                                    <th className="py-2 text-end pe-3">SCORE</th>
+                                                  </tr>
+                                                </thead>
+                                                <tbody>
+                                                  {students.length ? students.map((s, i) => (
+                                                    <tr key={i} style={{ fontSize: '12px' }}>
+                                                      <td className="ps-3 py-2 fw-medium">{s.name}</td>
+                                                      <td className="text-end pe-3 py-2">
+                                                        <span className={s.score < (report?.thresholds?.studentAtRisk || 70) ? 'text-danger fw-bold' : 'fw-bold text-accent'}>
+                                                          {s.score.toFixed(1)}%
+                                                        </span>
+                                                      </td>
+                                                    </tr>
+                                                  )) : (
+                                                    <tr>
+                                                      <td colSpan={2} className="text-center py-3 text-muted">
+                                                        {detail.loading ? 'Updating list...' : 'No student data record found.'}
+                                                      </td>
+                                                    </tr>
+                                                  )}
+                                                </tbody>
+                                              </table>
+                                            </div>
+                                            <div className="d-flex justify-content-between align-items-center mt-3">
+                                              <div className="text-soft" style={{ fontSize: '11px' }}>Showing {students.length} students</div>
+                                              <div className="d-flex gap-2">
+                                                <button 
+                                                  className="btn-premium py-1 px-2" 
+                                                  style={{ fontSize: '10px' }} 
+                                                  disabled={detail.page === 1} 
+                                                  onClick={(e) => { e.stopPropagation(); fetchAssessmentStudents(assessment._id, detail.page - 1); }}
                                                 >
-                                                  {s.score.toFixed(1)}%
-                                                </span>
-                                              </td>
-                                            </tr>
-                                          ))
-                                        ) : (
-                                          <tr>
-                                            <td
-                                              colSpan={2}
-                                              className="text-center py-3 text-muted"
-                                            >
-                                              {detail.loading
-                                                ? "Updating list..."
-                                                : "No student data record found."}
-                                            </td>
-                                          </tr>
-                                        )}
-                                      </tbody>
-                                    </table>
-                                  </div>
-                                  <div className="d-flex justify-content-between align-items-center mt-3">
-                                    <div
-                                      className="text-soft"
-                                      style={{ fontSize: "11px" }}
-                                    >
-                                      Showing {students.length} students
-                                    </div>
-                                    <div className="d-flex gap-2">
-                                      <button
-                                        className="btn-premium py-1 px-2"
-                                        style={{ fontSize: "10px" }}
-                                        disabled={detail.page === 1}
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          fetchAssessmentStudents(
-                                            assessment._id,
-                                            detail.page - 1,
-                                          );
-                                        }}
-                                      >
-                                        Prev
-                                      </button>
-                                      <button
-                                        className="btn-premium py-1 px-2"
-                                        style={{ fontSize: "10px" }}
-                                        disabled={
-                                          !students.length ||
-                                          students.length < 10
-                                        }
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          fetchAssessmentStudents(
-                                            assessment._id,
-                                            detail.page + 1,
-                                          );
-                                        }}
-                                      >
-                                        Next
-                                      </button>
-                                    </div>
-                                  </div>
-                                </div>
-                              </td>
-                            </motion.tr>
-                          )}
-                        </AnimatePresence>
-                      </Fragment>
-                    );
-                  })
-                ) : (
-                  <tr>
-                    <td colSpan={6} className="text-center py-5 text-muted">
-                      No exams available in selected date range.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                                                  Prev
+                                                </button>
+                                                <button 
+                                                  className="btn-premium py-1 px-2" 
+                                                  style={{ fontSize: '10px' }} 
+                                                  disabled={!students.length || students.length < 10} 
+                                                  onClick={(e) => { e.stopPropagation(); fetchAssessmentStudents(assessment._id, detail.page + 1); }}
+                                                >
+                                                  Next
+                                                </button>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        </td>
+                                      </motion.tr>
+                                    )}
+                                  </AnimatePresence>
+                                </Fragment>
+                              );
+                            }) : (
+                              <tr><td colSpan={6} className="text-center py-5 text-muted">No exams available for this course.</td></tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            );
+          })}
         </div>
       </div>
     );
