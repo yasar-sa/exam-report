@@ -10,27 +10,19 @@ const AssessmentSchema = new mongoose.Schema(
     courseId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Course",
-      required: true,
       index: true,
     },
-    type: {
+    status: {
       type: String,
-      required: true,
-      trim: true,
-      enum: ["Exam", "Quiz", "Assignment"],
+      enum: ["COMPLETED", "NOT_SCHEDULED", "SCHEDULED", "ONGOING"],
       index: true,
     },
     date: {
       type: Date,
-      required: true,
       index: true,
     },
-    isPublished: {
-      type: Boolean,
-      default: false,
-    },
   },
-  { timestamps: true }
+  { timestamps: true, collection: "exam_course_groups" }
 );
 
 export default mongoose.model("Assessment", AssessmentSchema);

@@ -92,6 +92,25 @@ router.post("/courses", validateCoursePayload, asyncHandler(async (req, res) => 
   res.status(201).json({ success: true, data });
 }));
 
+// router.get("/courses", asyncHandler(async (req, res) => {
+//   const {
+//     sortBy = "createdAt",
+//     order = "desc",
+//     search = "",
+//   } = req.query;
+
+//   const filter = search
+//     ? { name: { $regex: search, $options: "i" } }
+//     : {};
+
+//   const data = await Course.find(filter)
+//     .sort(parseSort(sortBy, order, ["name", "createdAt"], "createdAt"));
+
+//   res.json({ success: true, data });
+// }));
+
+
+// optimized course get for populating dropdowns - only fetch _id and name, also uses .lean() for faster read
 router.get("/courses", asyncHandler(async (req, res) => {
   const {
     sortBy = "createdAt",
@@ -104,10 +123,12 @@ router.get("/courses", asyncHandler(async (req, res) => {
     : {};
 
   const data = await Course.find(filter)
-    .sort(parseSort(sortBy, order, ["name", "createdAt"], "createdAt"));
-
+    .select("_id name")   // ONLY fetch required fields
+    .sort(parseSort(sortBy, order, ["name", "createdAt"], "createdAt"))
+    .lean(); 
   res.json({ success: true, data });
 }));
+
 
 router.get("/courses/:id", validateObjectIdParam("id"), asyncHandler(async (req, res) => {
   const data = await Course.findById(req.params.id);

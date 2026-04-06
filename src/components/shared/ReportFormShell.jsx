@@ -1,51 +1,75 @@
+import { ChevronLeft, Send, Trash2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+
 export default function ReportFormShell({
   title,
   reportName,
   onBack,
   onGenerate,
-  onDelete, // NEW
+  onDelete,
   isGenerating = false,
   children,
 }) {
-  const isReady = reportName.trim().length > 0 && typeof onGenerate === "function";
+  const navigate = useNavigate();
+  const isReady = (reportName || "").trim().length > 0 && typeof onGenerate === "function";
 
   return (
-    <>
-      <div className="sub-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <button className="back-link" onClick={onBack}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M19 12H5M12 5l-7 7 7 7" />
-          </svg>
-          Back to Advanced Reports
+    <div className="fade-in" style={{ maxWidth: "1000px", margin: "24px auto" }}>
+      <div className="d-flex justify-content-between align-items-center mb-4 px-2">
+        <button 
+          onClick={onBack}
+          className="btn-premium"
+          style={{ 
+            color: "var(--text-soft)",
+            padding: "8px 16px",
+            background: "white",
+            border: "1px solid #e2e8f0"
+          }}
+        >
+          <ChevronLeft size={18} />
+          Back to Reports
         </button>
-        <div className="d-flex flex-column flex-sm-row gap-3 align-items-sm-center mt-3 mt-sm-0">
+
+        <div className="d-flex gap-3">
           {onDelete && (
             <button 
               onClick={onDelete}
-              style={{ background: 'none', border: 'none', color: '#d32f2f', fontWeight: 600, fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}
+              className="btn-premium"
+              style={{ background: "#fee2e2", color: "#991b1b" }}
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V67M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-              DELETE
+              <Trash2 size={18} />
+              Delete
             </button>
           )}
-          <button
-            className={`btn-generate ${isReady && !isGenerating ? "active" : ""}`}
+          <button 
+            className={`btn-premium btn-primary-modern ${(!isReady || isGenerating) ? "opacity-50 cursor-not-allowed" : ""}`}
+            onClick={() => isReady && !isGenerating && onGenerate()}
             disabled={!isReady || isGenerating}
-            onClick={() => {
-              if (!isReady || isGenerating) return;
-              onGenerate();
-            }}
           >
-            GENERATE REPORT
+            <Send size={18} />
+            {isGenerating ? "Generating..." : "Generate Report"}
           </button>
         </div>
       </div>
 
-      {/* Card */}
-      <div className="form-card">
-        <div className="form-card-title">{title}</div>
-        <div className="form-body">{children}</div>
+      <div className="glass-card shadow-sm overflow-hidden">
+        <div style={{ 
+          padding: "24px", 
+          borderBottom: "1px solid #f1f5f9", 
+          textAlign: "center",
+          background: "#fcfcfc"
+        }}>
+          <h2 style={{ margin: 0, fontSize: "18px", fontWeight: 600 }}>{title}</h2>
+          {reportName && (
+            <div style={{ fontSize: "14px", color: "var(--text-soft)", marginTop: "6px" }}>
+              {reportName}
+            </div>
+          )}
+        </div>
+        <div style={{ padding: "32px" }}>
+          {children}
+        </div>
       </div>
-    </>
+    </div>
   );
 }

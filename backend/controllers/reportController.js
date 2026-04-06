@@ -43,22 +43,13 @@ export const getAssessmentStudents = async (req, res) => {
   const tStudent = parseThreshold(thresholdStudent, DEFAULT_THRESHOLD);
 
   const data = await Result.aggregate([
-    { $match: { assessmentId: assessmentObjId } },
-    {
-      $lookup: {
-        from: "students",
-        localField: "studentId",
-        foreignField: "_id",
-        as: "student",
-      },
-    },
-    { $unwind: "$student" },
+    { $match: { _reportCourse: assessmentObjId } },
     {
       $project: {
         _id: 0,
-        name: { $concat: ["$student.firstName", " ", "$student.lastName"] },
-        score: 1,
-        status: { $cond: [{ $lt: ["$score", tStudent] }, "At Risk", "Good"] },
+        name: "$student.name",
+        score: "$percentage",
+        status: { $cond: [{ $lt: ["$percentage", tStudent] }, "At Risk", "Good"] },
       },
     },
     { $sort: { score: 1 } },
@@ -80,48 +71,3 @@ export const getStudentReport = async (req, res) => {
     },
   });
 };
-
-// export const getCourseSummary = async (req, res) => {
-//   const data = await Result.aggregate([
-//     {
-//       $lookup: {
-//         from: "assessments",
-//         localField: "assessmentId",
-//         foreignField: "_id",
-//         as: "assessment"
-//       }
-//     },
-//     { $unwind: "$assessment" },
-
-//     {
-//       $lookup: {
-//         from: "courses",
-//         localField: "assessment.courseId",
-//         foreignField: "_id",
-//         as: "course"
-//       }
-//     },
-//     { $unwind: "$course" },
-
-//     {
-//       $group: {
-//         _id: "$course._id",
-//         avgScore: { $avg: "$score" }
-//       }
-//     },
-
-//     {
-//       $group: {
-//         // _id: null,
-//         totalCourses: { $sum: 1 },
-//         atRiskCourses: {
-//           $sum: {
-//             $cond: [{ $lt: ["$avgScore", threshold] }, 1, 0]
-//           }
-//         }
-//       }
-//     }
-//   ]);
-
-//   res.json({ success: true, data: data[0] || {} });
-// };

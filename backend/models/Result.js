@@ -4,26 +4,29 @@ const ResultSchema = new mongoose.Schema(
   {
     studentId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Student",
-      required: true,
       index: true,
     },
-    assessmentId: {
+    _reportCourse: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Assessment",
-      required: true,
+      ref: "ReportInstance",
       index: true,
     },
-    score: {
+    marks: {
       type: Number,
       required: true,
-      min: 0,
-      max: 100,
+    },
+    totalMarks: {
+      type: Number,
+      required: true,
+    },
+    percentage: {
+      type: Number,
+    },
+    grade: {
+      type: String,
     },
   },
-  { timestamps: true }
+  { timestamps: true, collection: "student_results" }
 );
-
-ResultSchema.index({ studentId: 1, assessmentId: 1 }, { unique: true });
 
 export default mongoose.model("Result", ResultSchema);

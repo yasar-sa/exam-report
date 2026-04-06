@@ -6,11 +6,15 @@ const CourseSchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true,
-      unique: true,
+      index: true,
+    },
+    type: {
+      type: String,
+      enum: ["course", "elective", "module"],
       index: true,
     },
   },
-  { timestamps: true }
+  { timestamps: true, collection: "course_hierarchies" }
 );
 
 export default mongoose.model("Course", CourseSchema);

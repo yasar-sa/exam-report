@@ -64,31 +64,26 @@ const buildCommonConfig = (config = {}) => {
       config.thresholdStudent ?? thresholds.studentAtRisk,
       DEFAULT_THRESHOLD,
     ),
-    typeList: buildTypeList(config),
     assessmentIdList: parseCommaList(
       config.assessmentIds || config.selectedAssessmentIds,
     ).map((id) => toObjectId(id, "assessmentId")),
     courseIds: parseCommaList(config.courseId || config.courseIds).map((id) =>
       toObjectId(id, "courseId"),
     ),
+    typeList: buildTypeList(config),
   };
 };
 
 const buildAssessmentMatch = ({
   courseIds,
-  typeList,
   assessmentIdList,
   start,
   end,
   includeDate,
 }) => {
   const match = {
-    "assessment.courseId": { $in: courseIds },
+    "course._id": { $in: courseIds },
   };
-
-  if (typeList.length > 0) {
-    match["assessment.type"] = { $in: typeList };
-  }
 
   if (assessmentIdList.length > 0) {
     match["assessment._id"] = { $in: assessmentIdList };
@@ -114,40 +109,56 @@ const fetchResultRows = async (assessmentMatch) => {
   return Result.aggregate([
     {
       $lookup: {
-        from: "assessments",
-        localField: "assessmentId",
+        from: "courses", //name of the collection in the db digiassess
+        localField: "_reportCourse", //field name of the courses collection in the student_result collection
+        foreignField: "_id", //field name of the course in the courses collection
+        as: "reportInstance", // name of the new name to be created
+      },
+    },
+    { $unwind: "$reportInstance" },
+    { $match: { "reportInstance.status.overAll": "PUBLISHED" } },
+    {
+      $lookup: {
+        from: "exam_course_groups",
+        localField: "reportInstance._courseGroup",
         foreignField: "_id",
         as: "assessment",
       },
     },
     { $unwind: "$assessment" },
-    { $match: assessmentMatch },
+    { $match: { "assessment.status": "COMPLETED" } },
     {
       $lookup: {
-        from: "students",
-        localField: "studentId",
-        foreignField: "_id",
-        as: "student",
+        from: "course_hierarchies",
+        localField: "assessment.name",
+        foreignField: "name",
+        as: "course",
       },
     },
-    { $unwind: "$student" },
+    { $unwind: "$course" },
+    { $match: assessmentMatch },
     {
       $project: {
         _id: 0,
-        assessmentId: "$assessment._id",
+        assessmentId: "$reportInstance._id",
         assessmentName: "$assessment.name",
-        assessmentType: "$assessment.type",
         assessmentDate: "$assessment.date",
-        assessmentIsPublished: "$assessment.isPublished",
-        courseId: "$assessment.courseId",
+        courseId: "$course._id",
+        courseName: "$course.name",
         studentId: "$student._id",
-        firstName: "$student.firstName",
-        lastName: "$student.lastName",
-        name: { $concat: ["$student.firstName", " ", "$student.lastName"] },
-        score: 1,
+        name: "$student.name",
+        score: "$percentage",
+        marks: 1,
+        totalMarks: 1,
+        grade: 1,
+        percentage: 1,
+        year: "$assessment.hierarchy.year.name",
+        term: "$assessment.hierarchy.term.name",
+        level: "$assessment.hierarchy.level.name",
+        program: "$assessment.hierarchy.program.name",
       },
     },
-    { $sort: { assessmentDate: -1, score: 1, lastName: 1, firstName: 1 } },
+    { $sort: { assessmentDate: -1, score: 1, name: 1 } },
   ]);
 };
 
@@ -162,85 +173,111 @@ const buildCourseSnapshotFromRows = ({
   thresholdStudent,
   assessmentIdList,
 }) => {
-  const assessmentMap = new Map();
-  const studentAverageMap = new Map();
+  const courseMap = new Map();
   const students = [];
 
   for (const row of rows) {
+    const courseKey = String(row.courseId);
     const assessmentKey = String(row.assessmentId);
     const studentKey = String(row.studentId);
 
-    if (!assessmentMap.has(assessmentKey)) {
-      assessmentMap.set(assessmentKey, {
+    if (!courseMap.has(courseKey)) {
+      courseMap.set(courseKey, {
+        _id: row.courseId,
+        name: row.courseName,
+        assessmentMap: new Map(),
+        studentMap: new Map(),
+        scoreTotal: 0,
+        assessmentCount: 0,
+      });
+    }
+
+    const courseData = courseMap.get(courseKey);
+
+    if (!courseData.assessmentMap.has(assessmentKey)) {
+      courseData.assessmentMap.set(assessmentKey, {
         _id: row.assessmentId,
         name: row.assessmentName,
-        type: row.assessmentType,
         date: row.assessmentDate,
-        isPublished: row.assessmentIsPublished,
+        year: row.year,
+        term: row.term,
+        level: row.level,
+        program: row.program,
         scoreTotal: 0,
         totalStudents: 0,
         atRiskStudents: 0,
       });
     }
 
-    const assessment = assessmentMap.get(assessmentKey);
+    const assessment = courseData.assessmentMap.get(assessmentKey);
     assessment.scoreTotal += row.score;
     assessment.totalStudents += 1;
     if (row.score < thresholdStudent) {
       assessment.atRiskStudents += 1;
     }
 
-    if (!studentAverageMap.has(studentKey)) {
-      studentAverageMap.set(studentKey, {
-        studentId: row.studentId,
-        scoreTotal: 0,
-        count: 0,
+    // Unique student tracking per course for course-level stats
+    if (!courseData.studentMap.has(studentKey)) {
+      courseData.studentMap.set(studentKey, {
+        isAtRisk: false,
       });
     }
-
-    const studentAverage = studentAverageMap.get(studentKey);
-    studentAverage.scoreTotal += row.score;
-    studentAverage.count += 1;
+    if (row.score < thresholdStudent) {
+      courseData.studentMap.get(studentKey).isAtRisk = true;
+    }
 
     students.push({
       assessmentId: row.assessmentId,
       studentId: row.studentId,
-      firstName: row.firstName,
-      lastName: row.lastName,
       name: row.name,
       score: row.score,
+      marks: row.marks,
+      totalMarks: row.totalMarks,
+      grade: row.grade,
       status: row.score < thresholdStudent ? "At Risk" : "Good",
     });
   }
 
-  const assessments = Array.from(assessmentMap.values())
-    .map((assessment) => {
-      const avgScore =
-        assessment.totalStudents > 0 ? assessment.scoreTotal / assessment.totalStudents : 0;
-
+  const courseGroups = Array.from(courseMap.values()).map((course) => {
+    const assessments = Array.from(course.assessmentMap.values()).map((a) => {
+      const avgScore = a.totalStudents > 0 ? a.scoreTotal / a.totalStudents : 0;
       return {
-        _id: assessment._id,
-        name: assessment.name,
-        type: assessment.type,
-        date: assessment.date,
-        isPublished: assessment.isPublished,
+        ...a,
         avgScore,
-        totalStudents: assessment.totalStudents,
-        atRiskStudents: assessment.atRiskStudents,
-        atRiskStudentPct:
-          assessment.totalStudents > 0
-            ? (assessment.atRiskStudents / assessment.totalStudents) * 100
-            : 0,
+        atRiskStudentPct: a.totalStudents > 0 ? (a.atRiskStudents / a.totalStudents) * 100 : 0,
         status: avgScore < thresholdCourse ? "At Risk" : "Good",
       };
-    })
-    .sort((first, second) => new Date(second.date) - new Date(first.date));
+    });
 
-  const totalAssessmentsCount = assessments.length;
-  const atRiskAssessmentsCount = assessments.filter((a) => a.status === "At Risk").length;
+    const studentList = Array.from(course.studentMap.values());
+    const totalStudents = studentList.length;
+    const atRiskStudents = studentList.filter((s) => s.isAtRisk).length;
+    const totalAssessments = assessments.length;
+    const atRiskAssessments = assessments.filter((a) => a.status === "At Risk").length;
+    const courseAvgScore =
+      totalAssessments > 0
+        ? assessments.reduce((sum, a) => sum + a.avgScore, 0) / totalAssessments
+        : 0;
+
+    return {
+      courseId: course._id,
+      courseName: course.name,
+      avgScore: courseAvgScore,
+      status: courseAvgScore < thresholdCourse ? "At Risk" : "Good",
+      totalAssessments,
+      atRiskAssessments,
+      totalStudents,
+      atRiskStudents,
+      assessments,
+    };
+  });
+
+  const totalAssessmentsCount = courseGroups.reduce((sum, g) => sum + g.totalAssessments, 0);
+  const atRiskAssessmentsCount = courseGroups.reduce((sum, g) => sum + g.atRiskAssessments, 0);
+  const atRiskCoursesCount = courseGroups.filter((g) => g.status === "At Risk").length;
   const avgScore =
-    totalAssessmentsCount > 0
-      ? assessments.reduce((sum, a) => sum + a.avgScore, 0) / totalAssessmentsCount
+    courseGroups.length > 0
+      ? courseGroups.reduce((sum, g) => sum + g.avgScore, 0) / courseGroups.length
       : 0;
 
   return {
@@ -257,8 +294,11 @@ const buildCourseSnapshotFromRows = ({
       selectedAssessmentIds: assessmentIdList.map((id) => String(id)),
       totalAssessmentsCount,
       atRiskAssessmentsCount,
+      totalCoursesCount: courseGroups.length,
+      atRiskCoursesCount,
       avgScore,
-      assessments,
+      courseGroups, // Nested data structure
+      assessments: courseGroups.flatMap((g) => g.assessments), // Stay compatible with old flat list if needed
     },
     students,
   };
@@ -280,8 +320,6 @@ const buildStudentSnapshotFromRows = ({
     if (!studentMap.has(studentKey)) {
       studentMap.set(studentKey, {
         _id: row.studentId,
-        firstName: row.firstName,
-        lastName: row.lastName,
         name: row.name,
         scoreTotal: 0,
         count: 0,
@@ -298,8 +336,6 @@ const buildStudentSnapshotFromRows = ({
       const avgScore = student.count > 0 ? student.scoreTotal / student.count : 0;
       return {
         studentId: student._id,
-        firstName: student.firstName,
-        lastName: student.lastName,
         name: student.name,
         avgScore,
         status: avgScore < thresholdStudent ? "At Risk" : "Good",
@@ -307,8 +343,7 @@ const buildStudentSnapshotFromRows = ({
     })
     .sort((first, second) => {
       if (first.avgScore !== second.avgScore) return first.avgScore - second.avgScore;
-      if (first.lastName !== second.lastName) return first.lastName.localeCompare(second.lastName);
-      return first.firstName.localeCompare(second.firstName);
+      return first.name.localeCompare(second.name);
     });
 
   return {
